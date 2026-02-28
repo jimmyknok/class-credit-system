@@ -1021,6 +1021,29 @@ a { text-decoration: none; }
   </div>
 </div>
 
+<!-- EDIT GROUP MODAL -->
+<div class="modal-overlay" id="modal-edit-group">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>✏️ 编辑小组</h2>
+      <button class="modal-close" onclick="closeModal('modal-edit-group')">✕</button>
+    </div>
+    <div class="form-group">
+      <label>小组名称</label>
+      <input class="form-input" id="edit-group-name" type="text" placeholder="例如：第一组">
+    </div>
+    <div class="form-group">
+      <label>小组别称（可选）</label>
+      <input class="form-input" id="edit-group-alias" type="text" placeholder="例如：王牌战队">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-edit-group')">取消</button>
+      <button class="btn btn-primary" onclick="saveEditGroup()">保存</button>
+    </div>
+    <input type="hidden" id="edit-group-id-val">
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="modal-overlay" id="modal-confirm">
   <div class="modal" style="max-width:380px">
@@ -1689,20 +1712,30 @@ function addGroup() {
 function editGroup(id) {
   const g = state.groups.find(gr => gr.id === id);
   if (!g) return;
-  // Simple inline edit via prompt-like modal
-  const newName = prompt(`编辑小组名称（当前：${g.name}）`, g.name);
-  if (newName && newName.trim()) {
-    const oldName = g.name;
-    g.name = newName.trim();
-    const newAlias = prompt(`编辑小组别称（当前：${g.alias || '无'}）`, g.alias || '');
-    if (newAlias !== null) g.alias = newAlias.trim();
-    // Update students
-    state.students.forEach(s => { if (s.group === oldName) s.group = g.name; });
-    saveState();
-    renderGroups();
-    renderStudents();
-    toast('小组信息已更新', 'success');
-  }
+  document.getElementById('edit-group-id-val').value = id;
+  document.getElementById('edit-group-name').value = g.name;
+  document.getElementById('edit-group-alias').value = g.alias || '';
+  openModal('modal-edit-group');
+}
+
+function saveEditGroup() {
+  const id = document.getElementById('edit-group-id-val').value;
+  const g = state.groups.find(gr => gr.id === id);
+  if (!g) return;
+  const newName = document.getElementById('edit-group-name').value.trim();
+  const newAlias = document.getElementById('edit-group-alias').value.trim();
+  if (!newName) { toast('小组名称不能为空', 'error'); return; }
+  const conflict = state.groups.find(gr => gr.name === newName && gr.id !== id);
+  if (conflict) { toast('该小组名称已存在', 'error'); return; }
+  const oldName = g.name;
+  g.name = newName;
+  g.alias = newAlias;
+  state.students.forEach(s => { if (s.group === oldName) s.group = newName; });
+  saveState();
+  closeModal('modal-edit-group');
+  renderGroups();
+  renderStudents();
+  toast('小组信息已更新', 'success');
 }
 
 function deleteGroup(id) {
