@@ -706,6 +706,10 @@ a { text-decoration: none; }
             <svg viewBox="0 0 16 16" fill="currentColor" style="width:13px;height:13px"><path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8z"/></svg>
             批量减分
           </button>
+          <button class="btn btn-accent btn-sm" onclick="openBatchRedeemModal()">
+            <svg viewBox="0 0 16 16" fill="currentColor" style="width:13px;height:13px"><path d="M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
+            批量兑换
+          </button>
           <button class="btn btn-outline btn-sm" onclick="selectAllStudents()">全选</button>
           <button class="btn btn-outline btn-sm" onclick="clearBatchSelection()">清除选择</button>
         </div>
@@ -983,7 +987,22 @@ a { text-decoration: none; }
 </div>
 
 <!-- REDEEM MODAL -->
-<div class="modal-overlay" id="modal-redeem">
+<!-- BATCH REDEEM MODAL -->
+<div class="modal-overlay" id="modal-batch-redeem">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2>🛍️ 批量兑换奖励</h2>
+      <button class="modal-close" onclick="closeModal('modal-batch-redeem')">✕</button>
+    </div>
+    <div class="score-modal-info" id="batch-redeem-info"></div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      选择要发放的奖励，<span style="color:var(--text3)">灰色表示有学生积分不足</span>
+    </p>
+    <div class="redeem-grid" id="batch-redeem-grid"></div>
+  </div>
+</div>
+
+<!-- REDEEM MODAL -->
   <div class="modal modal-wide">
     <div class="modal-header">
       <h2>🛍️ 积分兑换</h2>
@@ -1732,7 +1751,119 @@ function confirmRedeem(itemId) {
   });
 }
 
-// ===== LEADERBOARD =====
+// ===== 批量兑换（学生管理页批量模式 + 小组入口共用）=====
+// 批量兑换目标学生 id 列表（与 selectedIds 分开，避免互相污染）
+let batchRedeemIds = new Set();
+
+// 入口 A：学生管理页批量模式
+function openBatchRedeemModal() {
+  if (selectedIds.size === 0) { toast('请先选择学生', 'warning'); return; }
+  batchRedeemIds = new Set(selectedIds);
+  _openBatchRedeemModal('批量兑换奖励');
+}
+
+// 入口 B：小组管理页兑换图标
+function openGroupRedeem(groupName) {
+  const members = state.students.filter(s => s.group === groupName);
+  if (members.length === 0) { toast('该小组暂无成员', 'warning'); return; }
+  batchRedeemIds = new Set(members.map(s => s.id));
+  _openBatchRedeemModal(`${groupName} · 兑换奖励`);
+}
+
+// 内部：渲染批量兑换弹窗
+function _openBatchRedeemModal(title) {
+  const targets = [...batchRedeemIds].map(id => state.students.find(s => s.id === id)).filter(Boolean);
+  const count = targets.length;
+
+  // 顶部信息栏
+  document.querySelector('#modal-batch-redeem h2').textContent = `🛍️ ${title}`;
+  document.getElementById('batch-redeem-info').innerHTML = `
+    <div class="score-modal-avatar">👥</div>
+    <div>
+      <div class="score-modal-name">共 ${count} 名学生</div>
+      <div class="score-modal-scores">${targets.map(s => esc(s.name)).join('、')}</div>
+    </div>`;
+
+  // 商品列表：任一学生不足则灰显
+  const grid = document.getElementById('batch-redeem-grid');
+  if (state.shopItems.length === 0) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏪</div><h3>商店暂无商品</h3></div>';
+  } else {
+    grid.innerHTML = state.shopItems.map(item => {
+      const outOfStock = item.stock === 0;
+      const cannotList = targets.filter(s => s.availScore < item.cost);
+      const anyCannotAfford = cannotList.length > 0;
+      const dis = (outOfStock || anyCannotAfford) ? 'disabled' : '';
+      const stockStr = item.stock < 0 ? '无限制' : `库存 ${item.stock}`;
+      const tipStr = outOfStock ? '已售罄'
+        : anyCannotAfford ? `${cannotList.length} 人积分不足`
+        : `全部可兑换`;
+      const tipColor = outOfStock || anyCannotAfford ? 'var(--red)' : 'var(--green)';
+      return `<div class="redeem-item ${dis}" onclick="confirmBatchRedeem('${item.id}')">
+        <div class="redeem-item-icon">${item.icon}</div>
+        <div class="redeem-item-name">${esc(item.name)}</div>
+        <div class="redeem-item-cost">🔥 ${item.cost} 积分/人</div>
+        <div style="font-size:11px;color:${tipColor};margin-top:4px;font-weight:600">${tipStr}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px">${stockStr}</div>
+      </div>`;
+    }).join('');
+  }
+  openModal('modal-batch-redeem');
+}
+
+// 确认批量兑换（积分不足者跳过，其余正常扣除）
+function confirmBatchRedeem(itemId) {
+  const item = state.shopItems.find(i => i.id === itemId);
+  if (!item) return;
+  const targets = [...batchRedeemIds].map(id => state.students.find(s => s.id === id)).filter(Boolean);
+  const canRedeem = targets.filter(s => s.availScore >= item.cost);
+  const skipped   = targets.filter(s => s.availScore < item.cost);
+
+  // 库存检查
+  if (item.stock >= 0 && item.stock < canRedeem.length) {
+    toast(`库存不足，当前库存 ${item.stock}，需要 ${canRedeem.length}`, 'error');
+    return;
+  }
+
+  const skipMsg = skipped.length > 0 ? `\n跳过 ${skipped.length} 人（积分不足）：${skipped.map(s=>s.name).join('、')}` : '';
+  openConfirm(
+    `将为 ${canRedeem.length} 人兑换「${item.name}」，每人消耗 ${item.cost} 积分。${skipMsg}`,
+    async () => {
+      if (canRedeem.length === 0) { toast('没有学生可以兑换', 'warning'); return; }
+
+      const redeemRows = canRedeem.map(s => ({
+        id: uid(), student_id: s.id, student_name: s.name,
+        item_name: item.name, cost: item.cost, timestamp: Date.now()
+      }));
+      const newStock = item.stock >= 0 ? item.stock - canRedeem.length : item.stock;
+
+      // 写入 DB
+      const ops = [
+        sb.from('redeem_history').insert(redeemRows),
+        ...canRedeem.map(s => sb.from('students').update({ avail_score: s.availScore - item.cost }).eq('id', s.id)),
+      ];
+      if (item.stock >= 0) ops.push(sb.from('shop_items').update({ stock: newStock }).eq('id', item.id));
+
+      const results = await Promise.allSettled(ops);
+      const failed = results.filter(r => r.status === 'rejected' || r.value?.error);
+      if (failed.length > 0) { toast('部分操作失败，请检查网络', 'error'); return; }
+
+      // 更新内存
+      canRedeem.forEach(s => { s.availScore -= item.cost; });
+      item.stock = newStock;
+      redeemRows.forEach(r => state.redeemHistory.unshift(rowToRedeem({ ...r, student_id: r.student_id, student_name: r.student_name, item_name: r.item_name })));
+
+      closeModal('modal-batch-redeem');
+      renderStudents(); renderLeaderboard();
+      if (currentPage === 'groups') renderGroups();
+
+      const msg = skipped.length > 0
+        ? `已为 ${canRedeem.length} 人兑换「${item.name}」，跳过 ${skipped.length} 人`
+        : `已为 ${canRedeem.length} 人兑换「${item.name}」🎉`;
+      toast(msg, 'success');
+    }
+  );
+}
 let lbMode = 'personal';
 function switchLb(mode) {
   lbMode = mode;
@@ -1745,7 +1876,8 @@ const BADGES = ['积分王者','活力新星','追赶达人','实力派','潜力
 function renderLeaderboard() {
   const list = document.getElementById('lb-list');
   if (lbMode === 'personal') {
-    const students = [...state.students].sort((a,b) => b.totalScore - a.totalScore);
+    // 个人排行按可用积分排序
+    const students = [...state.students].sort((a,b) => b.availScore - a.availScore);
     if (students.length === 0) { list.innerHTML = '<div class="empty-state"><div class="icon">🏅</div><h3>暂无排行</h3></div>'; return; }
     list.innerHTML = students.map((s, i) => {
       const rank = i + 1;
@@ -1756,16 +1888,16 @@ function renderLeaderboard() {
         <div class="lb-rank ${rc}">${rankLabel}</div>
         <div class="lb-avatar ${rc}">${getAvatar(s)}</div>
         <div class="lb-info"><div class="lb-name">${esc(s.name)}</div>${badge}</div>
-        <div class="lb-score ${rc}">${s.totalScore}</div>
+        <div class="lb-score ${rc}">${s.availScore}</div>
       </div>`;
     }).join('');
   } else {
-    // Group ranking
+    // 小组排行按可用积分总和排序
     const groupScores = {};
     state.groups.forEach(g => { groupScores[g.name] = { total: 0, count: 0, group: g }; });
     state.students.forEach(s => {
       if (s.group && groupScores[s.group]) {
-        groupScores[s.group].total += s.totalScore;
+        groupScores[s.group].total += s.availScore;
         groupScores[s.group].count++;
       }
     });
@@ -1799,7 +1931,7 @@ function renderGroups() {
   state.students.forEach(s => {
     const g = state.groups.find(gr => gr.name === s.group);
     if (g && groupScores[g.id]) {
-      groupScores[g.id].total += s.totalScore;
+      groupScores[g.id].total += s.availScore;  // 改用可用积分
       groupScores[g.id].count++;
       groupScores[g.id].members.push(s.name);
     }
@@ -1826,9 +1958,10 @@ function renderGroups() {
       </div>
       <div class="group-stats">
         <div class="group-total">${gs.total}</div>
-        <div class="group-avg">均 ${avg}分</div>
+        <div class="group-avg">均 ${avg}分（可用）</div>
       </div>
       <div class="group-actions">
+        <button class="btn btn-icon" title="兑换奖励" onclick="openGroupRedeem('${g.name}')">🛍️</button>
         <button class="btn btn-icon" title="编辑小组" onclick="editGroup('${g.id}')">✏️</button>
         <button class="btn btn-icon" title="删除小组" onclick="openConfirm('确定删除小组「${g.name}」吗？该组学生将变为未分组。', ()=>deleteGroup('${g.id}'))">🗑️</button>
       </div>
