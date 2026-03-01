@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.1.1] - 2026-03-01
+
+### 🐛 Bug Fixes
+
+- **修复启动时数据加载失败问题**：将 `Promise.all` 并发请求改为顺序 `await`，解决 Supabase JS SDK 在并发场景下触发的 `DataCloneError: Headers object could not be cloned` 异常，该错误会导致页面白屏、数据无法加载。
+
+---
+
+## [1.1.0] - 2026-03-01
+
+### 🚀 Features
+
+- **接入 Supabase 云数据库**：数据存储从浏览器本地 `localStorage` 迁移至 Supabase（PostgreSQL），所有数据持久化在云端，刷新页面、更换设备不再丢失数据
+- **多端实时同步**：基于 Supabase Realtime 订阅，任意设备的操作（加减分、添加学生、编辑小组等）会实时推送至所有在线设备，无需手动刷新
+- **云端启动加载**：首次打开页面时显示加载遮罩，连接云端数据库成功后自动消失，避免数据未就绪时的空白闪烁
+- **统一错误处理**：所有数据库操作增加错误捕获，失败时通过 Toast 提示具体错误位置，方便排查
+
+### 🔄 Breaking Changes
+
+- 本地 `localStorage` 数据不会自动迁移，如有旧数据需通过「导出 CSV」备份后重新导入
+
+---
+
 ## [1.0.1] - 2026-02-28
 
 ### 🐛 Bug Fixes

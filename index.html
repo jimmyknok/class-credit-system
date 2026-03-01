@@ -1123,26 +1123,125 @@ a { text-decoration: none; }
 <!-- ============================================================
      JAVASCRIPT
      ============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// ===== DATA STORE =====
-const STORE_KEY = 'classpoints_v2';
+// ===== SUPABASE CONFIG =====
+const SUPABASE_URL = 'https://dicthvtbyjiodfsybwnx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_sdwuMjDj_1ynkZoqGTO9xQ_-_-KKy6E';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ===== DATA STORE (in-memory cache, synced from Supabase) =====
 let state = {
-  students: [],    // { id, name, gender, group, studentNo, avatar, totalScore, availScore }
-  groups: [],      // { id, name, alias }
-  rules: [],       // { id, name, value }
-  shopItems: [],   // { id, name, cost, stock, icon }
-  history: [],     // { id, studentId, studentName, delta, note, type, timestamp }
-  redeemHistory: [],// { id, studentId, studentName, itemName, cost, timestamp }
+  students: [],
+  groups: [],
+  rules: [],
+  shopItems: [],
+  history: [],
+  redeemHistory: [],
 };
 
-function saveState() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
+// ─── DB helpers ────────────────────────────────────────────────
+
+// 将 snake_case DB 行映射回 camelCase state 对象
+function rowToStudent(r) {
+  return { id: r.id, name: r.name, gender: r.gender, group: r.group || '', studentNo: r.student_no || '', totalScore: r.total_score || 0, availScore: r.avail_score || 0 };
 }
-function loadState() {
+function rowToGroup(r)   { return { id: r.id, name: r.name, alias: r.alias || '' }; }
+function rowToRule(r)    { return { id: r.id, name: r.name, value: r.value }; }
+function rowToItem(r)    { return { id: r.id, name: r.name, cost: r.cost, stock: r.stock, icon: r.icon || '🎁' }; }
+function rowToHistory(r) { return { id: r.id, studentId: r.student_id, studentName: r.student_name, delta: r.delta, note: r.note, type: r.type, timestamp: r.timestamp }; }
+function rowToRedeem(r)  { return { id: r.id, studentId: r.student_id, studentName: r.student_name, itemName: r.item_name, cost: r.cost, timestamp: r.timestamp }; }
+
+// 统一错误处理
+function dbErr(label, error) {
+  if (error) { console.error(`[DB] ${label}:`, error.message); toast(`数据库错误：${label}`, 'error'); }
+  return !!error;
+}
+
+// ─── 全量加载（启动时调用一次）─────────────────────────────────
+async function loadAllFromDB() {
+  showLoading(true);
   try {
-    const s = localStorage.getItem(STORE_KEY);
-    if (s) state = JSON.parse(s);
-  } catch(e) {}
+    const s  = await sb.from('students').select('*');
+    if (dbErr('加载学生', s.error)) return;
+    state.students = (s.data || []).map(rowToStudent);
+
+    const g  = await sb.from('groups').select('*');
+    if (dbErr('加载小组', g.error)) return;
+    state.groups = (g.data || []).map(rowToGroup);
+
+    const r  = await sb.from('rules').select('*');
+    if (dbErr('加载规则', r.error)) return;
+    state.rules = (r.data || []).map(rowToRule);
+
+    const si = await sb.from('shop_items').select('*');
+    if (dbErr('加载商店', si.error)) return;
+    state.shopItems = (si.data || []).map(rowToItem);
+
+    const h  = await sb.from('score_history').select('*').order('timestamp', { ascending: false }).limit(500);
+    if (dbErr('加载积分历史', h.error)) return;
+    state.history = (h.data || []).map(rowToHistory);
+
+    const rh = await sb.from('redeem_history').select('*').order('timestamp', { ascending: false }).limit(200);
+    if (dbErr('加载兑换历史', rh.error)) return;
+    state.redeemHistory = (rh.data || []).map(rowToRedeem);
+
+    await initDefaultData();
+  } finally {
+    showLoading(false);
+    renderStudents();
+    renderLeaderboard();
+  }
+}
+
+// ─── 实时订阅（多端同步）──────────────────────────────────────
+function subscribeRealtime() {
+  sb.channel('realtime-all')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, async () => {
+      const { data } = await sb.from('students').select('*');
+      state.students = (data || []).map(rowToStudent);
+      renderStudents(); renderLeaderboard();
+      if (currentPage === 'groups') renderGroups();
+      if (currentPage === 'data') updateDataStats();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'groups' }, async () => {
+      const { data } = await sb.from('groups').select('*');
+      state.groups = (data || []).map(rowToGroup);
+      if (currentPage === 'groups') renderGroups();
+      renderLeaderboard();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'rules' }, async () => {
+      const { data } = await sb.from('rules').select('*');
+      state.rules = (data || []).map(rowToRule);
+      if (currentPage === 'rules') renderRules();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_items' }, async () => {
+      const { data } = await sb.from('shop_items').select('*');
+      state.shopItems = (data || []).map(rowToItem);
+      if (currentPage === 'shop') renderShop();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'score_history' }, async () => {
+      const { data } = await sb.from('score_history').select('*').order('timestamp', { ascending: false }).limit(500);
+      state.history = (data || []).map(rowToHistory);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'redeem_history' }, async () => {
+      const { data } = await sb.from('redeem_history').select('*').order('timestamp', { ascending: false }).limit(200);
+      state.redeemHistory = (data || []).map(rowToRedeem);
+    })
+    .subscribe();
+}
+
+// ─── Loading 遮罩 ──────────────────────────────────────────────
+function showLoading(show) {
+  let el = document.getElementById('loading-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(245,243,255,.85);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:inherit';
+    el.innerHTML = `<div style="width:48px;height:48px;border:4px solid #EDE9FE;border-top-color:#7C3AED;border-radius:50%;animation:spin .8s linear infinite"></div><div style="font-size:15px;font-weight:600;color:#7C3AED">正在连接云端数据...</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+    document.body.appendChild(el);
+  }
+  el.style.display = show ? 'flex' : 'none';
 }
 
 // ===== INIT =====
@@ -1156,9 +1255,9 @@ function getAvatar(student) {
   return AVATARS[idx];
 }
 
-function initDefaultData() {
+async function initDefaultData() {
   if (state.rules.length === 0) {
-    state.rules = [
+    const defaults = [
       { id: uid(), name: '按时完成作业', value: 2 },
       { id: uid(), name: '课堂积极发言', value: 1 },
       { id: uid(), name: '帮助同学', value: 3 },
@@ -1168,9 +1267,11 @@ function initDefaultData() {
       { id: uid(), name: '未及时处理个人垃圾', value: -3 },
       { id: uid(), name: '迟到早退', value: -2 },
     ];
+    const { data } = await sb.from('rules').insert(defaults).select();
+    state.rules = (data || []).map(rowToRule);
   }
   if (state.shopItems.length === 0) {
-    state.shopItems = [
+    const defaults = [
       { id: uid(), name: '免做一次作业', cost: 500, stock: -1, icon: '📚' },
       { id: uid(), name: '挑选同桌', cost: 800, stock: -1, icon: '👥' },
       { id: uid(), name: '当一天班长', cost: 1000, stock: -1, icon: '👑' },
@@ -1178,14 +1279,18 @@ function initDefaultData() {
       { id: uid(), name: '看电影机会', cost: 1500, stock: -1, icon: '🎬' },
       { id: uid(), name: '优先选座位', cost: 600, stock: -1, icon: '🪑' },
     ];
+    const { data } = await sb.from('shop_items').insert(defaults).select();
+    state.shopItems = (data || []).map(rowToItem);
   }
   if (state.groups.length === 0) {
-    state.groups = [
+    const defaults = [
       { id: uid(), name: '第一组', alias: '王牌战队' },
       { id: uid(), name: '第二组', alias: '先锋战队' },
       { id: uid(), name: '第三组', alias: '进击小队' },
       { id: uid(), name: '第四组', alias: '努力追赶中...' },
     ];
+    const { data } = await sb.from('groups').insert(defaults).select();
+    state.groups = (data || []).map(rowToGroup);
   }
 }
 
@@ -1340,27 +1445,35 @@ function batchScore(dir) {
   openModal('modal-batch-score');
 }
 
-function applyBatchScore() {
+async function applyBatchScore() {
   let delta = parseFloat(document.getElementById('batch-score-delta').value);
   const note = document.getElementById('batch-score-note').value.trim();
   if (isNaN(delta) || delta === 0) { toast('请输入有效的积分变化值', 'error'); return; }
   if (batchDirection > 0 && delta < 0) delta = -delta;
   if (batchDirection < 0 && delta > 0) delta = -delta;
 
-  let count = 0;
-  selectedIds.forEach(id => {
-    const s = state.students.find(st => st.id === id);
-    if (s) {
-      s.totalScore += delta > 0 ? delta : 0;
-      s.availScore += delta;
-      state.history.push({ id: uid(), studentId: s.id, studentName: s.name, delta, note: note || (delta>0?'批量加分':'批量减分'), type: delta>=0?'add':'sub', timestamp: Date.now() });
-      count++;
-    }
-  });
-  saveState();
+  const targets = [...selectedIds].map(id => state.students.find(st => st.id === id)).filter(Boolean);
+  if (targets.length === 0) return;
+
+  const histRows = targets.map(s => ({
+    id: uid(), student_id: s.id, student_name: s.name, delta,
+    note: note || (delta>0?'批量加分':'批量减分'), type: delta>=0?'add':'sub', timestamp: Date.now()
+  }));
+
+  // Update each student score
+  await Promise.all(targets.map(s => {
+    const newAvail = s.availScore + delta;
+    const newTotal = delta > 0 ? s.totalScore + delta : s.totalScore;
+    return sb.from('students').update({ total_score: newTotal, avail_score: newAvail }).eq('id', s.id).then(() => {
+      s.totalScore = newTotal; s.availScore = newAvail;
+    });
+  }));
+  await sb.from('score_history').insert(histRows);
+  histRows.forEach(r => state.history.unshift(rowToHistory({ ...r, student_id: r.student_id, student_name: r.student_name })));
+
   closeModal('modal-batch-score');
   renderStudents();
-  toast(`已为 ${count} 名学生${delta>0?'加':'减'} ${Math.abs(delta)} 分`, 'success');
+  toast(`已为 ${targets.length} 名学生${delta>0?'加':'减'} ${Math.abs(delta)} 分`, 'success');
 }
 
 // ===== ADD STUDENT MODAL =====
@@ -1380,7 +1493,7 @@ function updateGroupDatalist() {
   if (dl2) dl2.innerHTML = opts;
 }
 
-function addStudents() {
+async function addStudents() {
   const namesRaw = document.getElementById('add-student-names').value;
   const gender = document.getElementById('add-student-gender').value;
   const group = document.getElementById('add-student-group').value.trim();
@@ -1389,19 +1502,24 @@ function addStudents() {
   const names = namesRaw.split(/[\n,，]+/).map(n => n.trim()).filter(Boolean);
   if (names.length === 0) { toast('请输入学生姓名', 'error'); return; }
 
-  names.forEach((name, i) => {
-    const id = uid();
-    state.students.push({ id, name, gender, group, studentNo: names.length === 1 ? studentNo : '', avatar: null, totalScore: 0, availScore: 0 });
-    // Auto-create group if not exists
-    if (group && !state.groups.find(g => g.name === group)) {
-      state.groups.push({ id: uid(), name: group, alias: '' });
-    }
-  });
+  // Auto-create group if not exists
+  if (group && !state.groups.find(g => g.name === group)) {
+    const newG = { id: uid(), name: group, alias: '' };
+    const { error } = await sb.from('groups').insert(newG);
+    if (!error) state.groups.push(newG);
+  }
 
-  saveState();
+  const rows = names.map((name, i) => ({
+    id: uid(), name, gender, group, student_no: names.length === 1 ? studentNo : '',
+    total_score: 0, avail_score: 0
+  }));
+
+  const { data, error } = await sb.from('students').insert(rows).select();
+  if (dbErr('添加学生', error)) return;
+  (data || []).forEach(r => state.students.push(rowToStudent(r)));
+
   closeModal('modal-add-student');
-  renderStudents();
-  renderLeaderboard();
+  renderStudents(); renderLeaderboard();
   toast(`成功添加 ${names.length} 名学生`, 'success');
 }
 
@@ -1434,20 +1552,28 @@ function renderRuleQuickSelect(containerId, isBatch, dir) {
   }).join('');
 }
 
-function applyScore() {
+async function applyScore() {
   const s = state.students.find(st => st.id === currentScoreTargetId);
   if (!s) return;
   let delta = parseFloat(document.getElementById('score-delta').value);
   const note = document.getElementById('score-note').value.trim();
   if (isNaN(delta) || delta === 0) { toast('请输入有效的积分变化值', 'error'); return; }
 
-  s.availScore += delta;
-  if (delta > 0) s.totalScore += delta;
-  state.history.push({ id: uid(), studentId: s.id, studentName: s.name, delta, note: note || (delta>0?'自定义加分':'自定义减分'), type: delta>=0?'add':'sub', timestamp: Date.now() });
-  saveState();
+  const newAvail = s.availScore + delta;
+  const newTotal = delta > 0 ? s.totalScore + delta : s.totalScore;
+  const histRow = { id: uid(), student_id: s.id, student_name: s.name, delta, note: note || (delta>0?'自定义加分':'自定义减分'), type: delta>=0?'add':'sub', timestamp: Date.now() };
+
+  const [upd, hist] = await Promise.all([
+    sb.from('students').update({ total_score: newTotal, avail_score: newAvail }).eq('id', s.id),
+    sb.from('score_history').insert(histRow),
+  ]);
+  if (dbErr('修改积分', upd.error || hist.error)) return;
+
+  s.totalScore = newTotal; s.availScore = newAvail;
+  state.history.unshift(rowToHistory({ ...histRow, student_id: histRow.student_id, student_name: histRow.student_name }));
+
   closeModal('modal-score');
-  renderStudents();
-  showScoreFlash(delta);
+  renderStudents(); showScoreFlash(delta);
   toast(`${s.name} ${delta>0?'+':''}${delta} 分`, delta>0?'success':'info');
 }
 
@@ -1523,17 +1649,23 @@ function renderHistoryList(id) {
   }).join('');
 }
 
-function undoHistory(hid) {
-  const idx = state.history.findIndex(h => h.id === hid);
-  if (idx < 0) return;
-  const h = state.history[idx];
+async function undoHistory(hid) {
+  const h = state.history.find(h => h.id === hid);
+  if (!h) return;
   const s = state.students.find(st => st.id === h.studentId);
-  if (s) {
-    s.availScore -= h.delta;
-    if (h.delta > 0) s.totalScore -= h.delta;
-  }
-  state.history.splice(idx, 1);
-  saveState();
+  if (!s) return;
+
+  const newAvail = s.availScore - h.delta;
+  const newTotal = h.delta > 0 ? s.totalScore - h.delta : s.totalScore;
+
+  const [upd, del] = await Promise.all([
+    sb.from('students').update({ total_score: newTotal, avail_score: newAvail }).eq('id', s.id),
+    sb.from('score_history').delete().eq('id', hid),
+  ]);
+  if (dbErr('撤销操作', upd.error || del.error)) return;
+
+  s.totalScore = newTotal; s.availScore = newAvail;
+  state.history = state.history.filter(h => h.id !== hid);
   renderHistoryList(currentHistoryStudentId);
   renderStudents();
   toast('已撤销该操作', 'info');
@@ -1575,11 +1707,25 @@ function confirmRedeem(itemId) {
   const item = state.shopItems.find(i => i.id === itemId);
   const s = state.students.find(st => st.id === currentRedeemStudentId);
   if (!item || !s) return;
-  openConfirm(`确定让 ${s.name} 消耗 ${item.cost} 积分兑换「${item.name}」吗？`, () => {
-    s.availScore -= item.cost;
-    if (item.stock > 0) item.stock--;
-    state.redeemHistory.push({ id: uid(), studentId: s.id, studentName: s.name, itemName: item.name, cost: item.cost, timestamp: Date.now() });
-    saveState();
+  openConfirm(`确定让 ${s.name} 消耗 ${item.cost} 积分兑换「${item.name}」吗？`, async () => {
+    const newAvail = s.availScore - item.cost;
+    const newStock = item.stock > 0 ? item.stock - 1 : item.stock;
+    const redeemRow = { id: uid(), student_id: s.id, student_name: s.name, item_name: item.name, cost: item.cost, timestamp: Date.now() };
+
+    const ops = [
+      sb.from('students').update({ avail_score: newAvail }).eq('id', s.id),
+      sb.from('redeem_history').insert(redeemRow),
+    ];
+    if (item.stock > 0) ops.push(sb.from('shop_items').update({ stock: newStock }).eq('id', item.id));
+
+    const results = await Promise.all(ops);
+    const err = results.find(r => r.error)?.error;
+    if (dbErr('兑换', err)) return;
+
+    s.availScore = newAvail;
+    item.stock = newStock;
+    state.redeemHistory.unshift(rowToRedeem({ ...redeemRow, student_id: redeemRow.student_id, student_name: redeemRow.student_name, item_name: redeemRow.item_name }));
+
     closeModal('modal-redeem');
     renderStudents();
     toast(`${s.name} 成功兑换「${item.name}」🎉`, 'success');
@@ -1696,16 +1842,17 @@ function openAddGroupModal() {
   openModal('modal-add-group');
 }
 
-function addGroup() {
+async function addGroup() {
   const name = document.getElementById('new-group-name').value.trim();
   if (!name) { toast('请输入小组名称', 'error'); return; }
   if (state.groups.find(g => g.name === name)) { toast('该小组已存在', 'error'); return; }
   const alias = document.getElementById('new-group-alias').value.trim();
-  state.groups.push({ id: uid(), name, alias });
-  saveState();
+  const row = { id: uid(), name, alias };
+  const { error } = await sb.from('groups').insert(row);
+  if (dbErr('添加小组', error)) return;
+  state.groups.push(rowToGroup(row));
   closeModal('modal-add-group');
-  renderGroups();
-  renderLeaderboard();
+  renderGroups(); renderLeaderboard();
   toast(`小组「${name}」已创建`, 'success');
 }
 
@@ -1718,7 +1865,7 @@ function editGroup(id) {
   openModal('modal-edit-group');
 }
 
-function saveEditGroup() {
+async function saveEditGroup() {
   const id = document.getElementById('edit-group-id-val').value;
   const g = state.groups.find(gr => gr.id === id);
   if (!g) return;
@@ -1728,25 +1875,38 @@ function saveEditGroup() {
   const conflict = state.groups.find(gr => gr.name === newName && gr.id !== id);
   if (conflict) { toast('该小组名称已存在', 'error'); return; }
   const oldName = g.name;
-  g.name = newName;
-  g.alias = newAlias;
-  state.students.forEach(s => { if (s.group === oldName) s.group = newName; });
-  saveState();
+
+  // Update group + all students in that group
+  const studentsToUpdate = state.students.filter(s => s.group === oldName);
+  const ops = [
+    sb.from('groups').update({ name: newName, alias: newAlias }).eq('id', id),
+    ...studentsToUpdate.map(s => sb.from('students').update({ group: newName }).eq('id', s.id)),
+  ];
+  const results = await Promise.all(ops);
+  const err = results.find(r => r.error)?.error;
+  if (dbErr('编辑小组', err)) return;
+
+  g.name = newName; g.alias = newAlias;
+  studentsToUpdate.forEach(s => { s.group = newName; });
   closeModal('modal-edit-group');
-  renderGroups();
-  renderStudents();
+  renderGroups(); renderStudents();
   toast('小组信息已更新', 'success');
 }
 
-function deleteGroup(id) {
+async function deleteGroup(id) {
   const g = state.groups.find(gr => gr.id === id);
   if (!g) return;
-  state.students.forEach(s => { if (s.group === g.name) s.group = ''; });
+  const studentsToUpdate = state.students.filter(s => s.group === g.name);
+  const ops = [
+    sb.from('groups').delete().eq('id', id),
+    ...studentsToUpdate.map(s => sb.from('students').update({ group: '' }).eq('id', s.id)),
+  ];
+  const results = await Promise.all(ops);
+  const err = results.find(r => r.error)?.error;
+  if (dbErr('删除小组', err)) return;
+  studentsToUpdate.forEach(s => { s.group = ''; });
   state.groups = state.groups.filter(gr => gr.id !== id);
-  saveState();
-  renderGroups();
-  renderStudents();
-  renderLeaderboard();
+  renderGroups(); renderStudents(); renderLeaderboard();
   toast('小组已删除', 'info');
 }
 
@@ -1762,36 +1922,42 @@ function openEditStudent(id) {
   openModal('modal-edit-student');
 }
 
-function saveEditStudent() {
+async function saveEditStudent() {
   const id = document.getElementById('edit-student-id-val').value;
   const s = state.students.find(st => st.id === id);
   if (!s) return;
   const name = document.getElementById('edit-student-name').value.trim();
   const group = document.getElementById('edit-student-group').value.trim();
   if (!name) { toast('姓名不能为空', 'error'); return; }
-  s.name = name;
-  s.group = group;
+
   if (group && !state.groups.find(g => g.name === group)) {
-    state.groups.push({ id: uid(), name: group, alias: '' });
+    const newG = { id: uid(), name: group, alias: '' };
+    await sb.from('groups').insert(newG);
+    state.groups.push(rowToGroup(newG));
   }
-  saveState();
+  const { error } = await sb.from('students').update({ name, group }).eq('id', id);
+  if (dbErr('编辑学生', error)) return;
+  s.name = name; s.group = group;
   closeModal('modal-edit-student');
-  renderStudents();
-  renderGroups();
+  renderStudents(); renderGroups();
   toast('学生信息已更新', 'success');
 }
 
-function deleteCurrentStudent() {
+async function deleteCurrentStudent() {
   const id = document.getElementById('edit-student-id-val').value;
   const s = state.students.find(st => st.id === id);
   if (!s) return;
-  openConfirm(`确定删除学生「${s.name}」吗？所有积分记录也将删除。`, () => {
+  openConfirm(`确定删除学生「${s.name}」吗？所有积分记录也将删除。`, async () => {
+    await Promise.all([
+      sb.from('students').delete().eq('id', id),
+      sb.from('score_history').delete().eq('student_id', id),
+      sb.from('redeem_history').delete().eq('student_id', id),
+    ]);
     state.students = state.students.filter(st => st.id !== id);
     state.history = state.history.filter(h => h.studentId !== id);
-    saveState();
+    state.redeemHistory = state.redeemHistory.filter(h => h.studentId !== id);
     closeModal('modal-edit-student');
-    renderStudents();
-    renderLeaderboard();
+    renderStudents(); renderLeaderboard();
     toast('学生已删除', 'info');
   });
 }
@@ -1815,22 +1981,25 @@ function renderRules() {
   }).join('');
 }
 
-function addRule() {
+async function addRule() {
   const name = document.getElementById('rule-name').value.trim();
   const value = parseFloat(document.getElementById('rule-value').value);
   if (!name) { toast('请输入规则名称', 'error'); return; }
   if (isNaN(value) || value === 0) { toast('请输入有效的积分值', 'error'); return; }
-  state.rules.push({ id: uid(), name, value });
+  const row = { id: uid(), name, value };
+  const { error } = await sb.from('rules').insert(row);
+  if (dbErr('添加规则', error)) return;
+  state.rules.push(rowToRule(row));
   document.getElementById('rule-name').value = '';
   document.getElementById('rule-value').value = '';
-  saveState();
   renderRules();
   toast('规则已添加', 'success');
 }
 
-function deleteRule(id) {
+async function deleteRule(id) {
+  const { error } = await sb.from('rules').delete().eq('id', id);
+  if (dbErr('删除规则', error)) return;
   state.rules = state.rules.filter(r => r.id !== id);
-  saveState();
   renderRules();
   toast('规则已删除', 'info');
 }
@@ -1854,7 +2023,7 @@ function renderShop() {
   }).join('');
 }
 
-function addShopItem() {
+async function addShopItem() {
   const name = document.getElementById('item-name').value.trim();
   const cost = parseInt(document.getElementById('item-cost').value);
   const stockRaw = document.getElementById('item-stock').value.trim();
@@ -1862,18 +2031,21 @@ function addShopItem() {
   if (isNaN(cost) || cost <= 0) { toast('请输入有效的积分数量', 'error'); return; }
   const stock = (stockRaw === '' || stockRaw === '无限制' || stockRaw === '∞') ? -1 : parseInt(stockRaw);
   const icon = SHOP_ICONS[state.shopItems.length % SHOP_ICONS.length];
-  state.shopItems.push({ id: uid(), name, cost, stock, icon });
+  const row = { id: uid(), name, cost, stock, icon };
+  const { error } = await sb.from('shop_items').insert(row);
+  if (dbErr('添加商品', error)) return;
+  state.shopItems.push(rowToItem(row));
   document.getElementById('item-name').value = '';
   document.getElementById('item-cost').value = '';
   document.getElementById('item-stock').value = '';
-  saveState();
   renderShop();
   toast('商品已添加', 'success');
 }
 
-function deleteShopItem(id) {
+async function deleteShopItem(id) {
+  const { error } = await sb.from('shop_items').delete().eq('id', id);
+  if (dbErr('删除商品', error)) return;
   state.shopItems = state.shopItems.filter(i => i.id !== id);
-  saveState();
   renderShop();
   toast('商品已删除', 'info');
 }
@@ -1891,11 +2063,12 @@ function updateDataStats() {
 }
 
 // ===== CLEAR ALL SCORES =====
-function clearAllScores() {
+async function clearAllScores() {
+  await Promise.all(
+    state.students.map(s => sb.from('students').update({ total_score: 0, avail_score: 0 }).eq('id', s.id))
+  );
   state.students.forEach(s => { s.totalScore = 0; s.availScore = 0; });
-  saveState();
-  renderStudents();
-  renderLeaderboard();
+  renderStudents(); renderLeaderboard();
   toast('所有积分已清零', 'info');
 }
 
@@ -1941,24 +2114,40 @@ function handleImportFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => {
+  reader.onload = async ev => {
     try {
       if (importMode === 'students') {
         const lines = ev.target.result.split('\n').filter(Boolean);
+        const rows = [];
         lines.slice(1).forEach(line => {
           const cols = line.split(',');
           if (!cols[0]?.trim()) return;
-          const id = uid();
-          state.students.push({ id, name: cols[0].trim(), gender: cols[1]==='男'?'male':'female', studentNo: cols[2]?.trim()||'', group: cols[3]?.trim()||'', totalScore: parseInt(cols[4])||0, availScore: parseInt(cols[5])||0 });
+          rows.push({ id: uid(), name: cols[0].trim(), gender: cols[1]==='男'?'male':'female', student_no: cols[2]?.trim()||'', group: cols[3]?.trim()||'', total_score: parseInt(cols[4])||0, avail_score: parseInt(cols[5])||0 });
         });
-        saveState(); renderStudents(); renderLeaderboard();
+        if (rows.length > 0) {
+          const { data, error } = await sb.from('students').insert(rows).select();
+          if (dbErr('导入学生', error)) return;
+          (data||[]).forEach(r => state.students.push(rowToStudent(r)));
+        }
+        renderStudents(); renderLeaderboard();
         toast('学生名单已导入', 'success');
       } else if (importMode === 'config') {
         const cfg = JSON.parse(ev.target.result);
-        if (cfg.rules) state.rules = cfg.rules;
-        if (cfg.shopItems) state.shopItems = cfg.shopItems;
-        if (cfg.groups) state.groups = cfg.groups;
-        saveState();
+        if (cfg.rules) {
+          await sb.from('rules').delete().neq('id', 'none');
+          const { data } = await sb.from('rules').insert(cfg.rules).select();
+          state.rules = (data||[]).map(rowToRule);
+        }
+        if (cfg.shopItems) {
+          await sb.from('shop_items').delete().neq('id', 'none');
+          const { data } = await sb.from('shop_items').insert(cfg.shopItems).select();
+          state.shopItems = (data||[]).map(rowToItem);
+        }
+        if (cfg.groups) {
+          await sb.from('groups').delete().neq('id', 'none');
+          const { data } = await sb.from('groups').insert(cfg.groups).select();
+          state.groups = (data||[]).map(rowToGroup);
+        }
         if (currentPage === 'rules') renderRules();
         if (currentPage === 'shop') renderShop();
         if (currentPage === 'groups') renderGroups();
@@ -2155,10 +2344,7 @@ function esc(str) {
 }
 
 // ===== BOOT =====
-loadState();
-initDefaultData();
-renderStudents();
-renderLeaderboard();
+loadAllFromDB().then(() => subscribeRealtime());
 </script>
 </body>
 </html>
