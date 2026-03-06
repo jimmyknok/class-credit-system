@@ -2,12 +2,20 @@
 
 基于 Figma Make 导出的 React 项目，根目录为主应用。原 HTML 版本已移至 `legacy/` 目录。
 
+## 版本线维护
+
+- `main`: 2.x 主线（React + Vite，多框架集成）
+- `html-v3`: 3.x 主线（单文件 HTML 维护线）
+
+单文件版本代码位于 `single-html/`，发布 tag 使用 `v3.*`。
+
 ## 项目结构
 
 ```
 class-credit-system/     # 主项目（React + Vite）
 ├── src/                 # 源码
 ├── legacy/              # 原 HTML 班级积分系统（备份）
+├── single-html/         # v3 单文件 HTML 维护目录（html-v3 分支）
 └── ...
 ```
 

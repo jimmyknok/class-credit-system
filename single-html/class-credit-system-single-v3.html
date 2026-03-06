@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>班级积分系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            indigo: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' },
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: #f1f1f1; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app"></div>
+
+  <script>
+    // ──────────────────────────────────────────────────────────────
+    // 1. 工具函数
+    // ──────────────────────────────────────────────────────────────
+    const $ = (s) => document.querySelector(s);
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const formatDate = (iso) => {
+      const d = new Date(iso);
+      return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 2. 图标
+    // ──────────────────────────────────────────────────────────────
+    const Icons = {
+      users: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      star: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+      trophy: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
+      plus: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      search: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+      edit2: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`,
+      trash2: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+      x: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+      check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
+      arrowRight: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+      chevronUp: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>`,
+      chevronDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>`,
+      chevronLeft: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>`,
+      chevronRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`,
+      minus: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      shuffle: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`,
+      timer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="2" x2="14" y2="2"/><line x1="12" y1="14" x2="15" y2="11"/><circle cx="12" cy="14" r="8"/></svg>`,
+      trendingUp: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`,
+      shoppingBag: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+      play: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+      pause: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>`,
+      refreshCw: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+      alertTriangle: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+      upload: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+      download: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+      calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+      package: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+      trendingDown: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>`,
+      database: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>`,
+      settings: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+      barChart3: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>`,
+      zap: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+      fileText: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><line x1="10" y1="9" x2="18" y2="9"/><line x1="10" y1="13" x2="18" y2="13"/><line x1="10" y1="17" x2="18" y2="17"/></svg>`,
+      menu: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>`,
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 3. LocalStorage 数据层
+    // ──────────────────────────────────────────────────────────────
+    const emptyState = () => ({
+      students: [],
+      groups: [],
+      rules: [],
+      records: [],
+      shopItems: [],
+      meta: { schemaVersion: 3, updatedAt: new Date().toISOString() },
+    });
+
+    function safeParseJSON(raw) {
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+
+    const DB = {
+      STORAGE_KEY: 'class_credit_system_data_v3',
+      LEGACY_KEYS: ['class_credit_system_data'],
+
+      bootstrapStorage() {
+        const current = localStorage.getItem(this.STORAGE_KEY);
+        if (current) {
+          const parsed = safeParseJSON(current);
+          if (!parsed) {
+            const fresh = emptyState();
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(fresh));
+            return fresh;
+          }
+          if (!parsed.meta) {
+            parsed.meta = { schemaVersion: 3, updatedAt: new Date().toISOString() };
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(parsed));
+          }
+          return parsed;
+        }
+
+        for (const key of this.LEGACY_KEYS) {
+          const legacyRaw = localStorage.getItem(key);
+          if (!legacyRaw) continue;
+          const legacy = safeParseJSON(legacyRaw);
+          if (!legacy) break;
+          const migrated = {
+            students: legacy.students || [],
+            groups: legacy.groups || [],
+            rules: legacy.rules || [],
+            records: legacy.records || [],
+            shopItems: legacy.shopItems || [],
+            meta: { schemaVersion: 3, updatedAt: new Date().toISOString() },
+          };
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(migrated));
+          return migrated;
+        }
+
+        const fresh = emptyState();
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(fresh));
+        return fresh;
+      },
+
+      getAll() {
+        this.bootstrapStorage();
+        const raw = localStorage.getItem(this.STORAGE_KEY);
+        if (!raw) return emptyState();
+        const data = safeParseJSON(raw);
+        if (!data) return emptyState();
+        return {
+          students: data.students || [],
+          groups: data.groups || [],
+          rules: data.rules || [],
+          records: data.records || [],
+          shopItems: data.shopItems || [],
+          meta: data.meta || { schemaVersion: 3, updatedAt: new Date().toISOString() },
+        };
+      },
+
+      saveAll(data) {
+        const withMeta = { ...data, meta: { schemaVersion: 3, updatedAt: new Date().toISOString() } };
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(withMeta));
+        this._notifyChange();
+      },
+
+      _listeners: [],
+      onChange(cb) { this._listeners.push(cb); },
+      _notifyChange() { this._listeners.forEach(cb => cb(this.getAll())); },
+
+      addStudent(name, groupId = null) {
+        const data = this.getAll();
+        const student = { id: uid(), name, groupId, totalPoints: 0, availablePoints: 0, createdAt: new Date().toISOString() };
+        data.students.push(student);
+        this.saveAll(data);
+        return student;
+      },
+
+      updateStudent(id, name, groupId) {
+        const data = this.getAll();
+        const s = data.students.find(st => st.id === id);
+        if (s) { s.name = name; s.groupId = groupId; this.saveAll(data); }
+      },
+
+      deleteStudent(id) {
+        const data = this.getAll();
+        data.students = data.students.filter(s => s.id !== id);
+        data.records = data.records.filter(r => r.studentId !== id);
+        this.saveAll(data);
+      },
+
+      deleteStudents(ids) {
+        const idSet = new Set(ids);
+        const data = this.getAll();
+        data.students = data.students.filter(s => !idSet.has(s.id));
+        data.records = data.records.filter(r => !idSet.has(r.studentId));
+        this.saveAll(data);
+      },
+
+      assignGroup(studentIds, groupId) {
+        const data = this.getAll();
+        const idSet = new Set(studentIds);
+        data.students.forEach(s => { if (idSet.has(s.id)) s.groupId = groupId; });
+        this.saveAll(data);
+      },
+
+      importStudents(rows, groupId = null) {
+        const data = this.getAll();
+        const newStudents = rows.map(row => ({
+          id: uid(), name: row.name.trim(), gender: row.gender, studentId: row.studentId,
+          groupId, totalPoints: 0, availablePoints: 0, createdAt: new Date().toISOString(),
+        }));
+        data.students.push(...newStudents);
+        this.saveAll(data);
+        return newStudents.length;
+      },
+
+      addGroup(name, color) {
+        const data = this.getAll();
+        const group = { id: uid(), name, color };
+        data.groups.push(group);
+        this.saveAll(data);
+        return group;
+      },
+
+      updateGroup(id, name, color) {
+        const data = this.getAll();
+        const g = data.groups.find(gr => gr.id === id);
+        if (g) { g.name = name; g.color = color; this.saveAll(data); }
+      },
+
+      deleteGroup(id) {
+        const data = this.getAll();
+        data.groups = data.groups.filter(g => g.id !== id);
+        data.students.forEach(s => { if (s.groupId === id) s.groupId = null; });
+        this.saveAll(data);
+      },
+
+      addRule(name, points, icon) {
+        const data = this.getAll();
+        const rule = { id: uid(), name, points, icon };
+        data.rules.push(rule);
+        this.saveAll(data);
+        return rule;
+      },
+
+      updateRule(id, name, points, icon) {
+        const data = this.getAll();
+        const r = data.rules.find(ru => ru.id === id);
+        if (r) { r.name = name; r.points = points; r.icon = icon; this.saveAll(data); }
+      },
+
+      deleteRule(id) {
+        const data = this.getAll();
+        data.rules = data.rules.filter(r => r.id !== id);
+        this.saveAll(data);
+      },
+
+      applyPoints(studentIds, points, reason, ruleId = null) {
+        const data = this.getAll();
+        const now = new Date().toISOString();
+        const isEarn = points > 0;
+        const type = isEarn ? 'earn' : 'deduct';
+        const absPoints = Math.abs(points);
+
+        const newRecords = studentIds.map(sid => ({
+          id: uid(), studentId: sid, type, points: absPoints, reason, ruleId, createdAt: now,
+        }));
+
+        data.students.forEach(s => {
+          if (studentIds.includes(s.id)) {
+            if (isEarn) {
+              s.totalPoints += absPoints;
+              s.availablePoints += absPoints;
+            } else {
+              s.availablePoints = Math.max(0, s.availablePoints - absPoints);
+            }
+          }
+        });
+
+        data.records.unshift(...newRecords);
+        this.saveAll(data);
+        return newRecords;
+      },
+
+      redeemItem(studentId, shopItemId) {
+        const data = this.getAll();
+        const student = data.students.find(s => s.id === studentId);
+        const item = data.shopItems.find(i => i.id === shopItemId);
+
+        if (!student || !item) return { success: false, message: '学生或商品不存在' };
+        if (student.availablePoints < item.requiredPoints) return { success: false, message: '可用积分不足' };
+        if (item.stock !== -1 && item.stock <= item.sold) return { success: false, message: '商品库存不足' };
+
+        student.availablePoints -= item.requiredPoints;
+        item.sold++;
+
+        const record = { id: uid(), studentId, type: 'redeem', points: item.requiredPoints, reason: `兑换：${item.name}`, shopItemId, createdAt: new Date().toISOString() };
+        data.records.unshift(record);
+        this.saveAll(data);
+        return { success: true, message: `成功兑换「${item.name}」` };
+      },
+
+      resetPoints() {
+        const data = this.getAll();
+        data.students.forEach(s => { s.totalPoints = 0; s.availablePoints = 0; });
+        data.records = [];
+        this.saveAll(data);
+      },
+
+      addShopItem(name, requiredPoints, stock, description) {
+        const data = this.getAll();
+        const item = { id: uid(), name, requiredPoints, stock, description, sold: 0 };
+        data.shopItems.push(item);
+        this.saveAll(data);
+        return item;
+      },
+
+      updateShopItem(id, name, requiredPoints, stock, description) {
+        const data = this.getAll();
+        const item = data.shopItems.find(i => i.id === id);
+        if (item) { item.name = name; item.requiredPoints = requiredPoints; item.stock = stock; item.description = description; this.saveAll(data); }
+      },
+
+      deleteShopItem(id) {
+        const data = this.getAll();
+        data.shopItems = data.shopItems.filter(i => i.id !== id);
+        this.saveAll(data);
+      },
+
+      getStudentById(id) { return this.getAll().students.find(s => s.id === id); },
+      getGroupById(id) { return this.getAll().groups.find(g => g.id === id); },
+      getGroupTotalPoints(groupId) {
+        return this.getAll().students.filter(s => s.groupId === groupId).reduce((sum, s) => sum + s.totalPoints, 0);
+      },
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 4. 路由系统
+    // ──────────────────────────────────────────────────────────────
+    const Router = {
+      routes: { '': 'Dashboard', 'students': 'Students', 'groups': 'Groups', 'points': 'Points', 'rules': 'Rules', 'records': 'Records', 'shop': 'Shop', 'tools': 'Tools', 'settings': 'Settings' },
+
+      init() {
+        window.addEventListener('hashchange', () => this.render());
+        this.render();
+      },
+
+      getCurrentRoute() {
+        const hash = window.location.hash.slice(1) || '';
+        return this.routes[hash] || 'Dashboard';
+      },
+
+      navigate(path) { window.location.hash = path; },
+
+      render() {
+        const route = this.getCurrentRoute();
+        const pageFn = Pages[route];
+        if (pageFn) {
+          const content = pageFn();
+          $('#app').innerHTML = Layout(content);
+          // 初始化页面事件
+          if (Pages[route]._init) Pages[route]._init();
+        }
+      },
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 5. 全局状态
+    // ──────────────────────────────────────────────────────────────
+    const Store = {
+      data: null,
+      init() {
+        this.data = DB.getAll();
+        DB.onChange(() => { this.data = DB.getAll(); });
+      },
+      get() { return this.data || DB.getAll(); },
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 6. UI 组件
+    // ──────────────────────────────────────────────────────────────
+    const Components = {
+      Modal: ({ title, content, onClose }) => `
+        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="if(event.target===this)(${onClose})">
+          <div class="bg-white rounded-2xl shadow-xl w-full max-w-md" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 class="text-gray-900 font-medium">${title}</h3>
+              <button onclick="${onClose}" class="text-gray-400 hover:text-gray-600">${Icons.x}</button>
+            </div>
+            <div class="p-6">${content}</div>
+          </div>
+        </div>
+      `,
+
+      toast(msg, type = 'success') {
+        const colors = { success: 'bg-emerald-50 border-emerald-200 text-emerald-700', error: 'bg-red-50 border-red-200 text-red-700' };
+        const icon = type === 'success' ? Icons.check : Icons.alertTriangle;
+        let container = $('#toast-container');
+        if (!container) {
+          container = document.createElement('div');
+          container.id = 'toast-container';
+          container.className = 'fixed top-4 right-4 z-50 space-y-2';
+          document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${colors[type]} shadow-lg`;
+        toast.innerHTML = `<span class="flex-shrink-0">${icon}</span>${msg}`;
+        container.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+      },
+
+      confirm({ title, message, onConfirm, onCancel }) {
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4';
+        modal.innerHTML = `
+          <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 class="text-gray-900 mb-2">${title}</h3>
+            <p class="text-sm text-gray-600 mb-5">${message}</p>
+            <div class="flex gap-2">
+              <button class="cancel flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button class="confirm flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">确认</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.querySelector('.cancel').onclick = () => { modal.remove(); onCancel?.(); };
+        modal.querySelector('.confirm').onclick = () => { modal.remove(); onConfirm?.(); };
+        modal.onclick = (e) => { if (e.target === modal) { modal.remove(); onCancel?.(); } };
+      },
+    };
+
+    // ──────────────────────────────────────────────────────────────
+    // 7. 页面组件
+    // ──────────────────────────────────────────────────────────────
+    const Pages = {};
+    const DashboardState = { ruleTab: 'earn' };
+
+    // ── Dashboard ─────────────────────────────────────────────────────
+    Pages.Dashboard = () => {
+      const { students, groups, records, shopItems } = Store.get();
+      const totalStudents = students.length;
+      const avgPoints = totalStudents > 0 ? Math.round(students.reduce((s, st) => s + st.totalPoints, 0) / totalStudents) : 0;
+      const maxPoints = students.reduce((m, s) => Math.max(m, s.totalPoints), 0);
+      const topStudent = students.find(s => s.totalPoints === maxPoints);
+      const recentRecords = records.slice(0, 6);
+
+      const topStudents = [...students].sort((a, b) => b.availablePoints - a.availablePoints).slice(0, 5).map(s => ({
+        name: s.name, points: s.availablePoints, group: groups.find(g => g.id === s.groupId) || null,
+      }));
+
+      const groupStats = groups.map(g => {
+        const members = students.filter(s => s.groupId === g.id);
+        const total = members.reduce((s, m) => s + m.availablePoints, 0);
+        return { name: g.name, points: total, color: g.color, count: members.length };
+      }).sort((a, b) => b.points - a.points).slice(0, 5);
+
+      const totalSold = shopItems.reduce((s, i) => s + i.sold, 0);
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+
+      const earnByStudent = (from, to) => {
+        const map = {};
+        records.forEach(r => {
+          if (r.type === 'earn' && r.createdAt >= from && r.createdAt < to) {
+            map[r.studentId] = (map[r.studentId] || 0) + r.points;
+          }
+        });
+        return map;
+      };
+      const thisEarn = earnByStudent(thisMonthStart, nextMonthStart);
+      const lastEarn = earnByStudent(lastMonthStart, thisMonthStart);
+      const growthTop = students.map(s => ({
+        id: s.id,
+        name: s.name,
+        growth: (thisEarn[s.id] || 0) - (lastEarn[s.id] || 0),
+        thisMonth: thisEarn[s.id] || 0,
+        lastMonth: lastEarn[s.id] || 0,
+      })).sort((a, b) => b.growth - a.growth).slice(0, 3);
+      const maxGrowth = Math.max(...growthTop.map(x => Math.abs(x.growth)), 1);
+
+      const ruleStatsMap = {};
+      records.forEach(r => {
+        if (!r.ruleId) return;
+        if (r.type !== 'earn' && r.type !== 'deduct') return;
+        if (!ruleStatsMap[r.ruleId]) ruleStatsMap[r.ruleId] = { id: r.ruleId, total: 0, type: r.type };
+        ruleStatsMap[r.ruleId].total += r.points;
+      });
+      const ruleStats = Object.values(ruleStatsMap).map(rs => {
+        const rule = Store.get().rules.find(x => x.id === rs.id);
+        return { ...rs, name: rule?.name || '未知规则', icon: rule?.icon || '📌' };
+      });
+      const topEarnRules = ruleStats.filter(r => r.type === 'earn').sort((a, b) => b.total - a.total).slice(0, 3);
+      const topDeductRules = ruleStats.filter(r => r.type === 'deduct').sort((a, b) => b.total - a.total).slice(0, 3);
+      const maxEarn = Math.max(...topEarnRules.map(r => r.total), 1);
+      const maxDeduct = Math.max(...topDeductRules.map(r => r.total), 1);
+
+      const totalAvailableAllGroups = Math.max(1, students.filter(s => s.groupId).reduce((sum, s) => sum + s.availablePoints, 0));
+
+      const ruleRows = (DashboardState.ruleTab === 'earn' ? topEarnRules : topDeductRules).map((r, i) => {
+        const usage = records.filter(x => x.ruleId === r.id).length;
+        const isEarn = DashboardState.ruleTab === 'earn';
+        return `
+          <tr class="border-b border-gray-50 last:border-0">
+            <td class="px-2 py-2 text-xs text-gray-400">#${i + 1}</td>
+            <td class="px-2 py-2 text-sm text-gray-700">${escapeHtml(r.icon)} ${escapeHtml(r.name)}</td>
+            <td class="px-2 py-2 text-sm text-gray-500">${usage}</td>
+            <td class="px-2 py-2 text-right text-sm font-semibold ${isEarn ? 'text-emerald-600' : 'text-red-600'}">${r.total}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="p-6 space-y-6 max-w-7xl mx-auto">
+          <div class="flex items-center justify-between">
+            <div><h1 class="text-gray-900 text-xl">总览</h1><p class="text-sm text-gray-500 mt-0.5">班级积分数据一览</p></div>
+            <div class="flex gap-2">
+              <button onclick="Router.navigate('points')" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">${Icons.plus} 积分操作</button>
+              <button onclick="Router.navigate('tools')" class="flex items-center gap-1.5 px-3 py-2 bg-white text-gray-700 rounded-lg text-sm border hover:bg-gray-50">${Icons.shuffle} 课堂工具</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            ${[
+              { label: '学生总数', value: totalStudents, sub: `${groups.length} 个小组`, icon: Icons.users, bg: 'bg-blue-50 text-blue-600' },
+              { label: '平均积分', value: avgPoints, sub: '历史累计', icon: Icons.star, bg: 'bg-indigo-50 text-indigo-600' },
+              { label: '最高积分', value: maxPoints, sub: topStudent?.name || '-', icon: Icons.trophy, bg: 'bg-amber-50 text-amber-600' },
+              { label: '总记录数', value: records.length, sub: `${totalSold} 次兑换`, icon: Icons.trendingUp, bg: 'bg-emerald-50 text-emerald-600' },
+            ].map(s => `
+              <div class="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+                <div class="flex items-start justify-between">
+                  <div><p class="text-xs text-gray-500 mb-1">${s.label}</p><p class="text-3xl font-semibold text-gray-900">${s.value}</p><p class="text-xs text-gray-400 mt-1">${s.sub}</p></div>
+                  <div class="w-9 h-9 rounded-lg flex items-center justify-center ${s.bg}">${s.icon}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-gray-900">个人积分榜</h3>
+                  <p class="text-xs text-gray-400 mt-0.5">按可用积分降序 · Top5</p>
+                </div>
+                <button onclick="Router.navigate('students')" class="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">全部 ${Icons.arrowRight}</button>
+              </div>
+              ${topStudents.length === 0 ? '<p class="text-sm text-gray-400 text-center py-6">暂无学生数据</p>' : `
+                <div class="space-y-3">
+                  ${topStudents.map((s, i) => `
+                    <div onclick="Router.navigate('students')" class="group cursor-pointer rounded-lg px-2 py-1.5 hover:bg-indigo-50/60 transition-colors flex items-center gap-3">
+                      <div class="w-8 text-center"><span class="text-sm font-semibold ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-gray-400' : i === 2 ? 'text-orange-400' : 'text-gray-400'}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</span></div>
+                      <div class="flex-1">
+                        <div class="flex justify-between items-center mb-1">
+                          <div class="flex items-center gap-2 min-w-0">
+                            <span class="text-sm text-gray-700 truncate">${escapeHtml(s.name)}</span>
+                            ${s.group ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">${escapeHtml(s.group.name)}</span>` : ''}
+                          </div>
+                          <span class="text-sm font-medium text-gray-900">${s.points}</span>
+                        </div>
+                        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div class="h-full bg-indigo-500 rounded-full transition-all duration-300 group-hover:bg-indigo-600" style="min-width:4px;width: ${topStudents[0].points > 0 ? (s.points / topStudents[0].points) * 100 : 0}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-gray-900">小组积分榜</h3>
+                <button onclick="Router.navigate('groups')" class="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">全部 ${Icons.arrowRight}</button>
+              </div>
+              ${groupStats.length === 0 ? '<p class="text-sm text-gray-400 text-center py-4">暂无小组数据</p>' : `
+                <div class="space-y-3">
+                  ${groupStats.map((g, i) => `
+                    <div class="flex items-center gap-3">
+                      <div class="relative w-8 h-8 rounded-full" style="background: conic-gradient(${g.color} ${(g.points / totalAvailableAllGroups) * 100}%, #e5e7eb 0);">
+                        <div class="absolute inset-1 rounded-full bg-white"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-gray-600">${i+1}</div>
+                      </div>
+                      <div class="flex-1">
+                      <div class="flex justify-between items-center mb-1"><span class="text-sm text-gray-700">${escapeHtml(g.name)}</span><span class="text-sm font-medium text-gray-900">${g.points}</span></div>
+                      <div class="h-1.5 bg-gray-100 rounded-full"><div class="h-full rounded-full" style="width: ${groupStats[0].points > 0 ? (g.points / groupStats[0].points) * 100 : 0}%; background-color: ${g.color}"></div></div>
+                        <p class="text-xs text-gray-400 mt-0.5">${g.count} 名成员 · 占比 ${Math.round((g.points / totalAvailableAllGroups) * 100)}%</p>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-gray-900">最新积分记录</h3>
+                <button onclick="Router.navigate('records')" class="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">全部 ${Icons.arrowRight}</button>
+              </div>
+              ${recentRecords.length === 0 ? '<p class="text-sm text-gray-400 text-center py-6">暂无积分记录</p>' : `
+                <div class="divide-y divide-gray-50">
+                  ${recentRecords.map(rec => {
+                    const student = DB.getStudentById(rec.studentId);
+                    const typeColor = rec.type === 'earn' ? 'text-emerald-600 bg-emerald-50' : rec.type === 'deduct' ? 'text-red-600 bg-red-50' : 'text-purple-600 bg-purple-50';
+                    const typeLabel = rec.type === 'earn' ? '加分' : rec.type === 'deduct' ? '扣分' : '兑换';
+                    const typeSign = rec.type === 'earn' ? '+' : '-';
+                    return `
+                      <div class="flex items-center gap-3 py-3">
+                        <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-medium text-indigo-700">${student?.name.slice(0, 1) || '?'}</div>
+                        <div class="flex-1 min-w-0">
+                          <p class="text-sm text-gray-800 truncate">${escapeHtml(student?.name || '未知学生')} · ${escapeHtml(rec.reason)}</p>
+                          <p class="text-xs text-gray-400">${formatDate(rec.createdAt)}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-xs px-2 py-0.5 rounded-full font-medium ${typeColor}">${typeLabel}</span>
+                          <span class="text-sm font-semibold ${rec.type === 'earn' ? 'text-emerald-600' : 'text-red-600'}">${typeSign}${rec.points}</span>
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <h3 class="text-gray-900">积分增长榜</h3>
+                  <p class="text-xs text-gray-400 mt-0.5">表扬进步最快同学 · 本月新增 - 上月新增 · Top3</p>
+                </div>
+                <button onclick="Router.navigate('records')" class="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">查看全部 ${Icons.arrowRight}</button>
+              </div>
+              ${growthTop.length === 0 ? '<p class="text-sm text-gray-400 text-center py-6">暂无数据</p>' : `
+                <div class="space-y-3">
+                  ${growthTop.map((g, i) => `
+                    <div onclick="Router.navigate('records')" class="group cursor-pointer rounded-lg px-2 py-1.5 hover:bg-indigo-50/60 transition-colors">
+                      <div class="flex items-center gap-2 justify-between">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-sm font-semibold ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-gray-400' : 'text-orange-400'}">${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                          <div class="w-7 h-7 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-xs font-semibold">${escapeHtml(g.name.slice(0, 1))}</div>
+                          <span class="text-sm text-gray-800 truncate">${escapeHtml(g.name)}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm font-medium ${g.growth >= 0 ? 'text-emerald-600' : 'text-red-600'}">${g.growth >= 0 ? '+' : ''}${g.growth}</span>
+                          <span class="text-xs text-gray-400">(${g.lastMonth}→${g.thisMonth})</span>
+                        </div>
+                      </div>
+                      <div class="h-2 bg-gray-100 rounded-full overflow-hidden mt-1">
+                        <div class="h-full rounded-full transition-all duration-300 ${g.growth >= 0 ? 'bg-indigo-500 group-hover:bg-indigo-600' : 'bg-red-500 group-hover:bg-red-600'}" style="min-width:4px;width:${Math.max(4, (Math.abs(g.growth) / maxGrowth) * 100)}%"></div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-gray-900">规则累计排行</h3>
+                <div class="flex rounded-md border border-gray-200 overflow-hidden">
+                  <button onclick="DashboardState.ruleTab='earn'; Router.render();" class="px-2 py-1 text-xs ${DashboardState.ruleTab === 'earn' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600'}">加分</button>
+                  <button onclick="DashboardState.ruleTab='deduct'; Router.render();" class="px-2 py-1 text-xs ${DashboardState.ruleTab === 'deduct' ? 'bg-red-600 text-white' : 'bg-white text-gray-600'}">减分</button>
+                </div>
+              </div>
+              <p class="text-xs text-gray-400 mb-2">${DashboardState.ruleTab === 'earn' ? '累计加分规则 TOP3（历史）' : '累计减分规则 TOP3（历史）'}</p>
+              ${ruleRows ? `
+                <div class="bg-gray-50/60 rounded-lg p-2">
+                  <table class="w-full">
+                    <thead>
+                      <tr>
+                        <th class="text-left px-2 py-1 text-[11px] text-gray-400 font-medium">名次</th>
+                        <th class="text-left px-2 py-1 text-[11px] text-gray-400 font-medium">规则</th>
+                        <th class="text-left px-2 py-1 text-[11px] text-gray-400 font-medium">次数</th>
+                        <th class="text-right px-2 py-1 text-[11px] text-gray-400 font-medium">累计分</th>
+                      </tr>
+                    </thead>
+                    <tbody>${ruleRows}</tbody>
+                  </table>
+                </div>
+              ` : `
+                <p class="text-xs text-gray-400">暂无</p>
+              `}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button onclick="Router.navigate('points')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm bg-indigo-600 hover:bg-indigo-700 text-white">${Icons.plus} 加减积分</button>
+            <button onclick="Router.navigate('tools')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm bg-purple-600 hover:bg-purple-700 text-white">${Icons.shuffle} 随机点名</button>
+            <button onclick="Router.navigate('tools')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm bg-amber-500 hover:bg-amber-600 text-white">${Icons.timer} 课堂计时</button>
+            <button onclick="Router.navigate('shop')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm bg-emerald-600 hover:bg-emerald-700 text-white">${Icons.trophy} 积分商店</button>
+          </div>
+        </div>
+      `;
+    };
+
+    // ── Students ────────────────────────────────────────────────────────
+    let StudentsState = {
+      search: '',
+      groupFilter: '',
+      sortBy: 'totalPoints',
+      sortDir: 'desc',
+      page: 1,
+      pageSize: 10,
+      selected: new Set(),
+      modal: null,
+      editing: null,
+      importMode: null,
+      importTab: 'text',
+      importRows: [],
+      importFileName: '',
+      importGroupId: '',
+    };
+
+    Pages.Students = () => {
+      const { students, groups } = Store.get();
+      const ungroupedCount = students.filter(s => !s.groupId).length;
+      const groupCount = (gid) => students.filter(s => s.groupId === gid).length;
+      const filtered = students.filter(s => {
+        const matchSearch = !StudentsState.search || s.name.toLowerCase().includes(StudentsState.search.toLowerCase());
+        const matchGroup = !StudentsState.groupFilter
+          || (StudentsState.groupFilter === '__none__' ? !s.groupId : s.groupId === StudentsState.groupFilter);
+        return matchSearch && matchGroup;
+      });
+      const sorted = [...filtered].sort((a, b) => {
+        const dir = StudentsState.sortDir === 'asc' ? 1 : -1;
+        if (StudentsState.sortBy === 'name') return a.name.localeCompare(b.name) * dir;
+        if (StudentsState.sortBy === 'availablePoints') return (a.availablePoints - b.availablePoints) * dir;
+        return (a.totalPoints - b.totalPoints) * dir;
+      });
+      const totalPages = Math.max(1, Math.ceil(sorted.length / StudentsState.pageSize));
+      if (StudentsState.page > totalPages) StudentsState.page = totalPages;
+      const pageStart = (StudentsState.page - 1) * StudentsState.pageSize;
+      const paged = sorted.slice(pageStart, pageStart + StudentsState.pageSize);
+      const sortMark = (col) => StudentsState.sortBy === col ? (StudentsState.sortDir === 'asc' ? '↑' : '↓') : '';
+
+      return `
+        <div class="p-6 max-w-6xl mx-auto space-y-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div><h1 class="text-gray-900 text-xl">学生管理</h1><p class="text-sm text-gray-500 mt-0.5">共 ${students.length} 名学生 · ${StudentsState.selected.size} 已选择</p></div>
+            <div class="flex gap-2">
+              ${StudentsState.selected.size > 0 ? `
+                <button onclick="Pages.Students._bulkDelete()" class="flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">${Icons.trash2} 删除</button>
+                <button onclick="Pages.Students._showBulkAssign()" class="flex items-center gap-1.5 px-3 py-2 bg-white text-gray-700 rounded-lg text-sm border hover:bg-gray-50">分配小组</button>
+              ` : ''}
+              <button onclick="Pages.Students._showImport()" class="flex items-center gap-1.5 px-3 py-2 bg-white text-gray-700 rounded-lg text-sm border hover:bg-gray-50">${Icons.upload} 导入</button>
+              <button onclick="StudentsState.modal = 'add'; Router.render();" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">${Icons.plus} 添加学生</button>
+            </div>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative flex-1">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">${Icons.search}</span>
+              <input id="student-search" placeholder="搜索学生..." value="${escapeHtml(StudentsState.search)}" class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <select id="student-group-filter" class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+              <option value="">全部小组</option>
+              ${groups.map(g => `<option value="${g.id}" ${StudentsState.groupFilter === g.id ? 'selected' : ''}>${escapeHtml(g.name)}（${groupCount(g.id)}人）</option>`).join('')}
+              <option value="__none__" ${StudentsState.groupFilter === '__none__' ? 'selected' : ''}>未分组（${ungroupedCount}人）</option>
+            </select>
+          </div>
+
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            ${sorted.length === 0 ? '<p class="text-sm text-gray-400 text-center py-8">暂无学生</p>' : `
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="w-10 px-4 py-3"><input type="checkbox" id="select-all-students" class="rounded border-gray-300" ${paged.length > 0 && paged.every(s => StudentsState.selected.has(s.id)) ? 'checked' : ''} /></th>
+                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                        <button onclick="Pages.Students._toggleSort('name')" class="hover:text-gray-700">学生 ${sortMark('name')}</button>
+                      </th>
+                      <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">小组</th>
+                      <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">
+                        <button onclick="Pages.Students._toggleSort('totalPoints')" class="hover:text-gray-700">总积分 ${sortMark('totalPoints')}</button>
+                      </th>
+                      <th class="px-4 py-3 text-right text-xs font-medium text-gray-500">
+                        <button onclick="Pages.Students._toggleSort('availablePoints')" class="hover:text-gray-700">可用 ${sortMark('availablePoints')}</button>
+                      </th>
+                      <th class="w-24 px-4 py-3 text-right text-xs font-medium text-gray-500">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-50">
+                    ${paged.map(s => {
+                      const group = groups.find(g => g.id === s.groupId);
+                      return `
+                        <tr class="hover:bg-gray-50">
+                          <td class="px-4 py-3"><input type="checkbox" class="student-select rounded border-gray-300" data-id="${s.id}" ${StudentsState.selected.has(s.id) ? 'checked' : ''} /></td>
+                          <td class="px-4 py-3">
+                            <div class="flex items-center gap-3">
+                              <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-medium text-indigo-700">${escapeHtml(s.name.slice(0, 1))}</div>
+                              <span class="text-sm text-gray-800">${escapeHtml(s.name)}</span>
+                            </div>
+                          </td>
+                          <td class="px-4 py-3">
+                            ${group ? `<span class="text-xs px-2 py-1 rounded-full text-white font-medium" style="background-color: ${group.color}">${escapeHtml(group.name)}</span>` : '<span class="text-xs text-gray-400">未分组</span>'}
+                          </td>
+                          <td class="px-4 py-3 text-right"><span class="text-sm font-medium text-gray-900">${s.totalPoints}</span></td>
+                          <td class="px-4 py-3 text-right"><span class="text-sm font-medium ${s.availablePoints > 0 ? 'text-emerald-600' : 'text-gray-500'}">${s.availablePoints}</span></td>
+                          <td class="px-4 py-3 text-right">
+                            <div class="flex justify-end gap-1">
+                              <button onclick="StudentsState.editing = Store.get().students.find(x=>x.id==='${s.id}'); StudentsState.modal = 'edit'; Router.render();" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">${Icons.edit2}</button>
+                              <button onclick="Pages.Students._delete('${s.id}')" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">${Icons.trash2}</button>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ${sorted.length > StudentsState.pageSize ? `
+                <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50">
+                  <span class="text-xs text-gray-500">共 ${sorted.length} 条，第 ${pageStart + 1}-${Math.min(pageStart + StudentsState.pageSize, sorted.length)} 条</span>
+                  <div class="flex items-center gap-2">
+                    <button onclick="Pages.Students._setPage(${StudentsState.page - 1})" ${StudentsState.page === 1 ? 'disabled' : ''} class="px-2 py-1 border border-gray-200 rounded text-xs ${StudentsState.page === 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'}">上一页</button>
+                    <span class="text-xs text-gray-600">${StudentsState.page}/${totalPages}</span>
+                    <button onclick="Pages.Students._setPage(${StudentsState.page + 1})" ${StudentsState.page === totalPages ? 'disabled' : ''} class="px-2 py-1 border border-gray-200 rounded text-xs ${StudentsState.page === totalPages ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'}">下一页</button>
+                  </div>
+                </div>
+              ` : ''}
+            `}
+          </div>
+
+          ${StudentsState.modal === 'add' || StudentsState.modal === 'edit' ? Pages.Students._renderModal() : ''}
+          ${StudentsState.modal === 'bulkAssign' ? Pages.Students._renderBulkAssignModal() : ''}
+          ${StudentsState.importMode ? Pages.Students._renderImportModal() : ''}
+        </div>
+      `;
+    };
+
+    Pages.Students._init = () => {
+      const searchInput = $('#student-search');
+      const groupFilter = $('#student-group-filter');
+      const selectAll = $('#select-all-students');
+
+      searchInput?.addEventListener('input', (e) => { StudentsState.search = e.target.value; StudentsState.page = 1; Router.render(); });
+      groupFilter?.addEventListener('change', (e) => { StudentsState.groupFilter = e.target.value; StudentsState.page = 1; Router.render(); });
+
+      selectAll?.addEventListener('change', (e) => {
+        const { students } = Store.get();
+        const filtered = students.filter(s => {
+          const matchSearch = !StudentsState.search || s.name.toLowerCase().includes(StudentsState.search.toLowerCase());
+          const matchGroup = !StudentsState.groupFilter || (StudentsState.groupFilter === '__none__' ? !s.groupId : s.groupId === StudentsState.groupFilter);
+          return matchSearch && matchGroup;
+        });
+        const sorted = [...filtered].sort((a, b) => {
+          const dir = StudentsState.sortDir === 'asc' ? 1 : -1;
+          if (StudentsState.sortBy === 'name') return a.name.localeCompare(b.name) * dir;
+          if (StudentsState.sortBy === 'availablePoints') return (a.availablePoints - b.availablePoints) * dir;
+          return (a.totalPoints - b.totalPoints) * dir;
+        });
+        const start = (StudentsState.page - 1) * StudentsState.pageSize;
+        const paged = sorted.slice(start, start + StudentsState.pageSize);
+        if (e.target.checked) paged.forEach(s => StudentsState.selected.add(s.id));
+        else paged.forEach(s => StudentsState.selected.delete(s.id));
+        Router.render();
+      });
+
+      document.querySelectorAll('.student-select').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+          if (e.target.checked) StudentsState.selected.add(e.target.dataset.id);
+          else StudentsState.selected.delete(e.target.dataset.id);
+          Router.render();
+        });
+      });
+    };
+
+    Pages.Students._toggleSort = (col) => {
+      if (StudentsState.sortBy === col) StudentsState.sortDir = StudentsState.sortDir === 'asc' ? 'desc' : 'asc';
+      else { StudentsState.sortBy = col; StudentsState.sortDir = 'desc'; }
+      StudentsState.page = 1;
+      Router.render();
+    };
+
+    Pages.Students._setPage = (p) => {
+      if (p < 1) return;
+      StudentsState.page = p;
+      Router.render();
+    };
+
+    Pages.Students._renderModal = () => {
+      const { groups } = Store.get();
+      const isEdit = StudentsState.modal === 'edit';
+      const student = StudentsState.editing || { name: '', groupId: '' };
+
+      return Components.Modal({
+        title: isEdit ? '编辑学生' : '添加学生',
+        onClose: 'StudentsState.modal=null; StudentsState.editing=null; Router.render();',
+        content: `
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-gray-700 mb-1.5">学生姓名 *</label>
+              <input id="student-name-input" value="${escapeHtml(student.name)}" placeholder="输入学生姓名" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+            <div>
+              <label class="block text-sm text-gray-700 mb-1.5">所属小组</label>
+              <select id="student-group-input" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">未分组（${students.filter(s => !s.groupId).length}人）</option>
+                ${groups.map(g => `<option value="${g.id}" ${student.groupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}（${students.filter(s => s.groupId === g.id).length}人）</option>`).join('')}
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="StudentsState.modal=null; StudentsState.editing=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onclick="Pages.Students._saveStudent()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">保存</button>
+            </div>
+          </div>
+        `
+      });
+    };
+
+    Pages.Students._saveStudent = () => {
+      const name = $('#student-name-input')?.value.trim();
+      const groupId = $('#student-group-input')?.value || null;
+      if (!name) return Components.toast('请输入学生姓名', 'error');
+
+      if (StudentsState.modal === 'edit') {
+        DB.updateStudent(StudentsState.editing.id, name, groupId);
+        Components.toast('学生信息已更新');
+      } else {
+        DB.addStudent(name, groupId);
+        Components.toast('学生已添加');
+      }
+      StudentsState.modal = null;
+      StudentsState.editing = null;
+      Router.render();
+    };
+
+    Pages.Students._delete = (id) => {
+      Components.confirm({
+        title: '删除学生',
+        message: '确定删除该学生吗？相关的积分记录也将被删除。',
+        onConfirm: () => { DB.deleteStudent(id); StudentsState.selected.delete(id); Components.toast('学生已删除'); Router.render(); }
+      });
+    };
+
+    Pages.Students._bulkDelete = () => {
+      Components.confirm({
+        title: '批量删除',
+        message: `确定删除选中的 ${StudentsState.selected.size} 名学生吗？`,
+        onConfirm: () => { DB.deleteStudents([...StudentsState.selected]); StudentsState.selected.clear(); Components.toast('学生已删除'); Router.render(); }
+      });
+    };
+
+    Pages.Students._showBulkAssign = () => { StudentsState.modal = 'bulkAssign'; Router.render(); };
+    Pages.Students._showImport = () => {
+      StudentsState.importMode = true;
+      StudentsState.importTab = 'text';
+      StudentsState.importRows = [];
+      StudentsState.importFileName = '';
+      StudentsState.importGroupId = '';
+      Router.render();
+    };
+
+    Pages.Students._renderBulkAssignModal = () => {
+      const { groups } = Store.get();
+      return Components.Modal({
+        title: '批量分配小组',
+        onClose: 'StudentsState.modal=null; Router.render();',
+        content: `
+          <div class="space-y-4">
+            <p class="text-sm text-gray-600">为 ${StudentsState.selected.size} 名学生分配小组</p>
+            <select id="bulk-group-select" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">未分组（${Store.get().students.filter(s => !s.groupId).length}人）</option>
+              ${groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)}（${Store.get().students.filter(s => s.groupId === g.id).length}人）</option>`).join('')}
+            </select>
+            <div class="flex gap-2">
+              <button onclick="StudentsState.modal=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onclick="const gid=$('#bulk-group-select').value; if(gid!==null){DB.assignGroup([...StudentsState.selected],gid||null); StudentsState.selected.clear(); StudentsState.modal=null; Components.toast('小组已分配'); Router.render();}" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">确认</button>
+            </div>
+          </div>
+        `
+      });
+    };
+
+    Pages.Students._renderImportModal = () => {
+      return Components.Modal({
+        title: '导入学生',
+        onClose: 'StudentsState.importMode=null; Router.render();',
+        content: `
+          <div class="space-y-4">
+            <div class="flex rounded-lg overflow-hidden border border-gray-200">
+              <button onclick="StudentsState.importTab='text'; Router.render();" class="flex-1 py-2 text-sm ${StudentsState.importTab === 'text' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">快速输入</button>
+              <button onclick="StudentsState.importTab='csv'; Router.render();" class="flex-1 py-2 text-sm ${StudentsState.importTab === 'csv' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}">CSV 上传</button>
+            </div>
+            ${StudentsState.importTab === 'text' ? `
+              <div>
+                <label class="block text-sm text-gray-700 mb-1.5">输入学生名单（每行一个姓名）</label>
+                <textarea id="import-names" rows="6" placeholder="张三&#10;李四&#10;王五" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"></textarea>
+              </div>
+            ` : `
+              <div class="space-y-2">
+                <label class="block text-sm text-gray-700">选择 CSV 文件（列: 姓名,性别,学号）</label>
+                <input type="file" accept=".csv" onchange="Pages.Students._handleCsvFile(event)" class="w-full text-sm" />
+                ${StudentsState.importFileName ? `<p class="text-xs text-indigo-600">已选择: ${escapeHtml(StudentsState.importFileName)} (${StudentsState.importRows.length} 条)</p>` : ''}
+                ${StudentsState.importRows.length > 0 ? `
+                  <div class="max-h-32 overflow-auto border border-gray-100 rounded-lg">
+                    <table class="w-full text-xs">
+                      <thead><tr class="bg-gray-50"><th class="text-left px-2 py-1">姓名</th><th class="text-left px-2 py-1">性别</th><th class="text-left px-2 py-1">学号</th></tr></thead>
+                      <tbody>${StudentsState.importRows.slice(0, 5).map(r => `<tr><td class="px-2 py-1">${escapeHtml(r.name)}</td><td class="px-2 py-1">${escapeHtml(r.gender || '-')}</td><td class="px-2 py-1">${escapeHtml(r.studentId || '-')}</td></tr>`).join('')}</tbody>
+                    </table>
+                  </div>
+                ` : ''}
+              </div>
+            `}
+            <div>
+              <label class="block text-sm text-gray-700 mb-1.5">批量分配小组（可选）</label>
+              <select id="import-group-input" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">未分组（${Store.get().students.filter(s => !s.groupId).length}人）</option>
+                ${Store.get().groups.map(g => `<option value="${g.id}" ${StudentsState.importGroupId === g.id ? 'selected' : ''}>${escapeHtml(g.name)}（${Store.get().students.filter(s => s.groupId === g.id).length}人）</option>`).join('')}
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="StudentsState.importMode=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onclick="Pages.Students._confirmImport()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">导入</button>
+            </div>
+          </div>
+        `
+      });
+    };
+
+    Pages.Students._handleCsvFile = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      StudentsState.importFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const text = String(ev.target?.result || '');
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        const start = /姓名|name|学生/i.test(lines[0] || '') ? 1 : 0;
+        StudentsState.importRows = lines.slice(start).map(line => {
+          const cols = line.split(',').map(c => c.trim());
+          return { name: cols[0] || '', gender: cols[1] || '', studentId: cols[2] || '' };
+        }).filter(r => r.name);
+        Router.render();
+      };
+      reader.readAsText(file, 'UTF-8');
+    };
+
+    Pages.Students._confirmImport = () => {
+      const groupId = $('#import-group-input')?.value || null;
+      let rows = [];
+      if (StudentsState.importTab === 'text') {
+        const txt = $('#import-names')?.value || '';
+        rows = txt.split('\n').map(x => ({ name: x.trim() })).filter(x => x.name);
+      } else {
+        rows = StudentsState.importRows;
+      }
+      if (!rows.length) return Components.toast('没有可导入的数据', 'error');
+      const count = DB.importStudents(rows, groupId);
+      StudentsState.importMode = null;
+      Components.toast(`已导入 ${count} 名学生`);
+      Router.render();
+    };
+
+    // ── Groups ──────────────────────────────────────────────────────────
+    const GroupsState = { modal: null, editing: null, deleting: null };
+    const COLOR_PRESETS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#84cc16'];
+
+    Pages.Groups = () => {
+      const { groups, students } = Store.get();
+      const groupStats = groups.map(g => {
+        const members = students.filter(s => s.groupId === g.id);
+        const totalPoints = DB.getGroupTotalPoints(g.id);
+        const avgPoints = members.length > 0 ? Math.round(totalPoints / members.length) : 0;
+        return { ...g, members, totalPoints, avgPoints };
+      }).sort((a, b) => b.totalPoints - a.totalPoints);
+      const maxPoints = Math.max(...groupStats.map(g => g.totalPoints), 1);
+
+      return `
+        <div class="p-6 max-w-5xl mx-auto space-y-5">
+          <div class="flex items-center justify-between">
+            <div><h1 class="text-gray-900 text-xl">小组管理</h1><p class="text-sm text-gray-500 mt-0.5">共 ${groups.length} 个小组 · ${students.filter(s => !s.groupId).length} 名未分组</p></div>
+            <button onclick="GroupsState.modal = 'add'; Router.render();" class="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">${Icons.plus} 新建小组</button>
+          </div>
+
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 class="text-gray-800 mb-4 flex items-center gap-2"><span class="text-amber-500">🏆</span> 小组积分排行</h3>
+            ${groupStats.length === 0 ? '<p class="text-sm text-gray-400 text-center py-6">暂无小组，请先创建小组</p>' : `
+              <div class="space-y-3">
+                ${groupStats.map((g, i) => `
+                  <div class="flex items-center gap-4">
+                    <div class="w-7 text-center"><span class="text-sm font-semibold text-gray-500">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}</span></div>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0" style="background-color: ${g.color}">${escapeHtml(g.name.slice(0, 1))}</div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between mb-1"><span class="text-sm font-medium text-gray-800">${escapeHtml(g.name)}</span><div class="text-sm text-gray-600"><span class="font-semibold text-gray-900">${g.totalPoints}</span> 分 · 均 ${g.avgPoints} 分</div></div>
+                      <div class="h-2 bg-gray-100 rounded-full overflow-hidden"><div class="h-full rounded-full transition-all" style="width: ${(g.totalPoints / maxPoints) * 100}%; background-color: ${g.color}"></div></div>
+                      <p class="text-xs text-gray-400 mt-0.5">${g.members.length} 名成员</p>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            `}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            ${groupStats.map(g => `
+              <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div class="flex items-start justify-between mb-4">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-semibold" style="background-color: ${g.color}">${escapeHtml(g.name.slice(0, 1))}</div>
+                    <div><h4 class="text-gray-900">${escapeHtml(g.name)}</h4><p class="text-xs text-gray-400">${g.members.length} 名成员</p></div>
+                  </div>
+                  <div class="flex gap-1">
+                    <button onclick="GroupsState.editing = Store.get().groups.find(x=>x.id==='${g.id}'); GroupsState.modal = 'edit'; Router.render();" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">${Icons.edit2}</button>
+                    <button onclick="GroupsState.deleting = Store.get().groups.find(x=>x.id==='${g.id}'); GroupsState.modal = 'delete'; Router.render();" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">${Icons.trash2}</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                  <div class="bg-gray-50 rounded-lg p-3"><p class="text-xs text-gray-400 mb-0.5">总积分</p><p class="text-lg font-semibold text-gray-900">${g.totalPoints}</p></div>
+                  <div class="bg-gray-50 rounded-lg p-3"><p class="text-xs text-gray-400 mb-0.5">人均积分</p><p class="text-lg font-semibold text-gray-900">${g.avgPoints}</p></div>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-500 mb-2 flex items-center gap-1">${Icons.users} 成员列表</p>
+                  ${g.members.length === 0 ? '<p class="text-xs text-gray-400 italic">暂无成员</p>' : `
+                    <div class="space-y-1.5 max-h-32 overflow-y-auto scrollbar-thin">
+                      ${g.members.sort((a, b) => b.totalPoints - a.totalPoints).map(m => `
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <div class="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs" style="background-color: ${g.color}">${escapeHtml(m.name.slice(0, 1))}</div>
+                            <span class="text-xs text-gray-700">${escapeHtml(m.name)}</span>
+                          </div>
+                          <span class="text-xs font-medium text-gray-600">${m.totalPoints} 分</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  `}
+                </div>
+              </div>
+            `).join('')}
+
+            ${students.filter(s => !s.groupId).length > 0 ? `
+              <div class="bg-white rounded-xl border border-dashed border-gray-200 p-5">
+                <div class="flex items-center gap-3 mb-3">
+                  <div class="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">${Icons.users}</div>
+                  <div><h4 class="text-gray-500">未分组</h4><p class="text-xs text-gray-400">${students.filter(s => !s.groupId).length} 名成员</p></div>
+                </div>
+                <p class="text-xs text-gray-400 text-center py-3 bg-gray-50 rounded-lg">前往「学生管理」→ 筛选「未分组」→ 批量指派小组</p>
+              </div>
+            ` : ''}
+          </div>
+
+          ${GroupsState.modal === 'add' ? Pages.Groups._renderModal('新建小组') : ''}
+          ${GroupsState.modal === 'edit' ? Pages.Groups._renderModal('编辑小组', GroupsState.editing) : ''}
+          ${GroupsState.modal === 'delete' ? Pages.Groups._renderDeleteModal() : ''}
+        </div>
+      `;
+    };
+
+    Pages.Groups._renderModal = (title, initial = null) => {
+      const name = initial?.name || '';
+      const color = initial?.color || '#6366f1';
+      return Components.Modal({
+        title,
+        onClose: 'GroupsState.modal=null; GroupsState.editing=null; GroupsState.selectedColor="#6366f1"; Router.render();',
+        content: `
+          <div class="space-y-4" id="group-modal-container">
+            <div>
+              <label class="block text-sm text-gray-700 mb-1.5">小组名称 *</label>
+              <input id="group-name-input" value="${escapeHtml(name)}" placeholder="如：四大天王、精英组..." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" oninput="document.getElementById('group-name-preview').textContent=this.value||'小组名称预览'; document.getElementById('group-badge-preview').textContent=this.value||'预览'; document.getElementById('group-icon-preview').textContent=(this.value||'组').slice(0,1);" />
+            </div>
+            <div>
+              <label class="block text-sm text-gray-700 mb-2">小组颜色</label>
+              <div class="flex flex-wrap gap-2 mb-3">
+                ${COLOR_PRESETS.map(c => `<button type="button" onclick="Pages.Groups._selectColor('${c}')" class="w-8 h-8 rounded-full transition-transform hover:scale-110 group-color-btn" style="background-color: ${c}; outline: ${color === c ? '3px solid ' + c : 'none'}; outline-offset: 2px;"></button>`).join('')}
+              </div>
+              <div class="flex items-center gap-2">
+                <input type="color" id="group-color-input" value="${color}" onchange="Pages.Groups._selectColor(this.value)" class="w-8 h-8 rounded cursor-pointer border-0" />
+                <span class="text-sm text-gray-500">自定义颜色: <span id="color-display">${color}</span></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+              <div id="group-icon-preview" class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium" style="background-color: ${color}">${name ? name.slice(0, 1) : '组'}</div>
+              <span id="group-name-preview" class="text-sm text-gray-700">${name || '小组名称预览'}</span>
+              <span id="group-badge-preview" class="ml-auto text-xs px-2 py-0.5 rounded-full text-white font-medium" style="background-color: ${color}">${name || '预览'}</span>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="GroupsState.modal=null; GroupsState.editing=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onclick="Pages.Groups._saveGroup()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">保存</button>
+            </div>
+          </div>
+        `
+      });
+    };
+
+    let _selectedGroupColor = '#6366f1';
+    Pages.Groups._selectColor = (c) => {
+      _selectedGroupColor = c;
+      document.getElementById('color-display').textContent = c;
+      document.getElementById('group-color-input').value = c;
+      document.getElementById('group-icon-preview').style.backgroundColor = c;
+      document.getElementById('group-badge-preview').style.backgroundColor = c;
+      document.querySelectorAll('.group-color-btn').forEach(btn => {
+        btn.style.outline = btn.style.backgroundColor === c ? '3px solid ' + c : 'none';
+      });
+    };
+
+    Pages.Groups._saveGroup = () => {
+      const name = $('#group-name-input')?.value.trim();
+      const color = $('#group-color-input')?.value || '#6366f1';
+      if (!name) return Components.toast('请输入小组名称', 'error');
+
+      if (GroupsState.modal === 'edit') {
+        DB.updateGroup(GroupsState.editing.id, name, color);
+        Components.toast('小组已更新');
+      } else {
+        DB.addGroup(name, color);
+        Components.toast('小组已创建');
+      }
+      GroupsState.modal = null;
+      GroupsState.editing = null;
+      Router.render();
+    };
+
+    Pages.Groups._renderDeleteModal = () => {
+      const g = GroupsState.deleting;
+      return Components.Modal({
+        title: '删除小组',
+        onClose: 'GroupsState.modal=null; GroupsState.deleting=null; Router.render();',
+        content: `
+          <div class="space-y-4">
+            <p class="text-sm text-gray-600">确定删除「${escapeHtml(g.name)}」小组吗？</p>
+            <p class="text-sm text-amber-600">⚠️ 该小组的成员将变为"未分组"状态。</p>
+            <div class="flex gap-2">
+              <button onclick="GroupsState.modal=null; GroupsState.deleting=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">取消</button>
+              <button onclick="DB.deleteGroup('${g.id}'); GroupsState.modal=null; GroupsState.deleting=null; Components.toast('小组已删除'); Router.render();" class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">确认删除</button>
+            </div>
+          </div>
+        `
+      });
+    };
+    const RuleIconOptions = ['✅','🙋','📝','🤝','🏆','⭐','🎯','💡','🔥','📚','🎓','💪','🌟','👍','❤️','⏰','🔇','📋','❌','⚠️','😴','🚫'];
+    const PointsState = { selected: new Set(), mode: 'earn', customPoints: '', reason: '', filterGroup: '', search: '', message: '' };
+    const RulesState = { modal: null, editing: null };
+    const RecordsState = { type: '', studentId: '', search: '', page: 1, pageSize: 20 };
+    const ShopState = { modal: null, editing: null, redeeming: null };
+    const ToolsState = { timerRunning: false, timerTotal: 300, timerRemaining: 300, timerInput: '', timerTick: null, randomGroup: '', randomCount: 1, randomResult: [], randomDisplay: '', randomSpinning: false };
+    const SettingsState = { confirmReset: false, confirmText: '' };
+
+    function toCSVLine(fields) {
+      return fields.map(v => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(',');
+    }
+    function downloadCSV(content, filename) {
+      const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+    function downloadJSON(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    Pages.Points = () => {
+      const { students, groups, rules } = Store.get();
+      const ungroupedCount = students.filter(s => !s.groupId).length;
+      const groupCount = (gid) => students.filter(s => s.groupId === gid).length;
+      const filtered = students.filter(s => {
+        const mg = !PointsState.filterGroup || (PointsState.filterGroup === '__none__' ? !s.groupId : s.groupId === PointsState.filterGroup);
+        const ms = !PointsState.search || s.name.includes(PointsState.search);
+        return mg && ms;
+      });
+      const positiveRules = rules.filter(r => r.points > 0);
+      const negativeRules = rules.filter(r => r.points < 0);
+      return `
+        <div class="p-6 max-w-5xl mx-auto space-y-5">
+          <div><h1 class="text-gray-900 text-xl">积分操作</h1><p class="text-sm text-gray-500 mt-0.5">选择学生后，应用积分规则或自定义加减分</p></div>
+          ${PointsState.message ? `<div class="px-4 py-2 text-sm bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700">${escapeHtml(PointsState.message)}</div>` : ''}
+          <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            <div class="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+              <div class="flex items-center justify-between"><h3 class="text-gray-800">选择学生</h3><span class="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">已选 ${PointsState.selected.size} 人</span></div>
+              <select onchange="PointsState.filterGroup=this.value; Router.render();" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">全部学生</option><option value="__none__" ${PointsState.filterGroup === '__none__' ? 'selected' : ''}>未分组（${ungroupedCount}人）</option>
+                ${groups.map(g => `<option value="${g.id}" ${PointsState.filterGroup === g.id ? 'selected' : ''}>${escapeHtml(g.name)}（${groupCount(g.id)}人）</option>`).join('')}
+              </select>
+              <input value="${escapeHtml(PointsState.search)}" oninput="PointsState.search=this.value; Router.render();" placeholder="搜索姓名..." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <div class="flex gap-2">
+                <button onclick="filteredStudentsForPoints().forEach(s=>PointsState.selected.add(s.id)); Router.render();" class="flex-1 text-xs py-1.5 border border-indigo-200 text-indigo-600 rounded-lg">全选</button>
+                <button onclick="PointsState.selected.clear(); Router.render();" class="flex-1 text-xs py-1.5 border border-gray-200 text-gray-600 rounded-lg">清除</button>
+              </div>
+              <div class="space-y-1.5 max-h-80 overflow-y-auto scrollbar-thin">
+                ${filtered.map(s => {
+                  const g = groups.find(x => x.id === s.groupId);
+                  const checked = PointsState.selected.has(s.id);
+                  return `<button onclick="togglePointStudent('${s.id}')" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-left ${checked ? 'border-indigo-300 bg-indigo-50' : 'border-gray-100 hover:bg-gray-50'}">
+                    <input type="checkbox" ${checked ? 'checked' : ''} class="pointer-events-none" />
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs" style="background-color:${g?.color || '#9ca3af'}">${escapeHtml(s.name.slice(0,1))}</div>
+                    <div><p class="text-sm text-gray-800">${escapeHtml(s.name)}</p><p class="text-xs text-gray-400">${escapeHtml(g?.name || '未分组')} · ${s.availablePoints} 分可用</p></div>
+                  </button>`;
+                }).join('')}
+              </div>
+            </div>
+            <div class="lg:col-span-3 space-y-4">
+              <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <h3 class="text-gray-800 mb-3">快速应用规则</h3>
+                ${positiveRules.length ? `<p class="text-xs text-gray-400 mb-2">加分规则</p><div class="flex flex-wrap gap-2 mb-3">${positiveRules.map(r => `<button onclick="applyRuleById('${r.id}')" ${PointsState.selected.size === 0 ? 'disabled' : ''} class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm ${PointsState.selected.size === 0 ? 'opacity-40' : ''}">${escapeHtml(r.icon)} ${escapeHtml(r.name)} +${r.points}</button>`).join('')}</div>` : ''}
+                ${negativeRules.length ? `<p class="text-xs text-gray-400 mb-2">扣分规则</p><div class="flex flex-wrap gap-2">${negativeRules.map(r => `<button onclick="applyRuleById('${r.id}')" ${PointsState.selected.size === 0 ? 'disabled' : ''} class="px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm ${PointsState.selected.size === 0 ? 'opacity-40' : ''}">${escapeHtml(r.icon)} ${escapeHtml(r.name)} ${r.points}</button>`).join('')}</div>` : ''}
+                ${rules.length === 0 ? '<p class="text-sm text-gray-400 text-center py-4">暂无积分规则，请先添加</p>' : ''}
+              </div>
+              <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-3">
+                <h3 class="text-gray-800">自定义积分</h3>
+                <div class="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
+                  <button onclick="PointsState.mode='earn'; Router.render();" class="px-4 py-2 text-sm ${PointsState.mode === 'earn' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600'}">加分</button>
+                  <button onclick="PointsState.mode='deduct'; Router.render();" class="px-4 py-2 text-sm ${PointsState.mode === 'deduct' ? 'bg-red-600 text-white' : 'bg-white text-gray-600'}">扣分</button>
+                </div>
+                <input type="number" min="1" value="${escapeHtml(PointsState.customPoints)}" oninput="PointsState.customPoints=this.value" placeholder="输入分数" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <input value="${escapeHtml(PointsState.reason)}" oninput="PointsState.reason=this.value" placeholder="填写原因..." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                <button onclick="applyCustomPoints()" ${PointsState.selected.size === 0 ? 'disabled' : ''} class="w-full py-2.5 rounded-lg text-sm text-white ${PointsState.mode === 'earn' ? 'bg-emerald-600' : 'bg-red-600'} ${PointsState.selected.size === 0 ? 'opacity-40' : ''}">确认${PointsState.mode === 'earn' ? '加' : '扣'}分 (${PointsState.selected.size} 人)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    Pages.Rules = () => {
+      const { rules, records } = Store.get();
+      const pRules = rules.filter(r => r.points > 0);
+      const nRules = rules.filter(r => r.points < 0);
+      const usage = (id) => records.filter(r => r.ruleId === id).length;
+      const card = (rule) => `<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl ${rule.points > 0 ? 'bg-emerald-50' : 'bg-red-50'}">${escapeHtml(rule.icon)}</div>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-800">${escapeHtml(rule.name)}</p><p class="text-xs text-gray-400 mt-0.5">已使用 ${usage(rule.id)} 次</p></div>
+        <div class="text-lg font-bold ${rule.points > 0 ? 'text-emerald-600' : 'text-red-600'}">${rule.points > 0 ? '+' : ''}${rule.points}</div>
+        <div class="flex gap-1"><button onclick="RulesState.editing=Store.get().rules.find(r=>r.id==='${rule.id}'); RulesState.modal='edit'; Router.render();" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">${Icons.edit2}</button><button onclick="deleteRule('${rule.id}')" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">${Icons.trash2}</button></div>
+      </div>`;
+      return `
+        <div class="p-6 max-w-3xl mx-auto space-y-5">
+          <div class="flex items-center justify-between"><div><h1 class="text-gray-900 text-xl">积分规则</h1><p class="text-sm text-gray-500 mt-0.5">定义规则后，可在积分操作页一键套用</p></div><button onclick="RulesState.modal='add'; Router.render();" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">新建规则</button></div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-semibold text-gray-900">${rules.length}</p><p class="text-xs text-gray-400">规则总数</p></div>
+            <div class="bg-emerald-50 rounded-xl border border-emerald-100 p-4 text-center"><p class="text-2xl font-semibold text-emerald-700">${pRules.length}</p><p class="text-xs text-emerald-500">加分规则</p></div>
+            <div class="bg-red-50 rounded-xl border border-red-100 p-4 text-center"><p class="text-2xl font-semibold text-red-700">${nRules.length}</p><p class="text-xs text-red-500">扣分规则</p></div>
+          </div>
+          ${pRules.length ? `<div><h3 class="text-gray-700 mb-2">加分规则</h3><div class="space-y-2">${pRules.map(card).join('')}</div></div>` : ''}
+          ${nRules.length ? `<div><h3 class="text-gray-700 mb-2">扣分规则</h3><div class="space-y-2">${nRules.map(card).join('')}</div></div>` : ''}
+          ${rules.length === 0 ? '<div class="text-center py-10 bg-white rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">暂无积分规则</div>' : ''}
+          ${RulesState.modal ? renderRuleModal() : ''}
+        </div>
+      `;
+    };
+
+    Pages.Records = () => {
+      const { records, students, groups } = Store.get();
+      const filtered = [...records].filter(r => {
+        const s = students.find(st => st.id === r.studentId);
+        const mt = !RecordsState.type || r.type === RecordsState.type;
+        const ms = !RecordsState.studentId || r.studentId === RecordsState.studentId;
+        const mk = !RecordsState.search || r.reason.includes(RecordsState.search) || (s?.name || '').includes(RecordsState.search);
+        return mt && ms && mk;
+      }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const totalPages = Math.max(1, Math.ceil(filtered.length / RecordsState.pageSize));
+      if (RecordsState.page > totalPages) RecordsState.page = totalPages;
+      const pageItems = filtered.slice((RecordsState.page - 1) * RecordsState.pageSize, RecordsState.page * RecordsState.pageSize);
+      const stats = {
+        earn: records.filter(r => r.type === 'earn').reduce((s, r) => s + r.points, 0),
+        deduct: records.filter(r => r.type === 'deduct').reduce((s, r) => s + r.points, 0),
+        redeem: records.filter(r => r.type === 'redeem').reduce((s, r) => s + r.points, 0),
+      };
+      return `
+        <div class="p-6 max-w-5xl mx-auto space-y-5">
+          <div><h1 class="text-gray-900 text-xl">积分记录</h1><p class="text-sm text-gray-500 mt-0.5">所有积分变动的历史记录</p></div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-semibold text-gray-900">${records.length}</p><p class="text-xs text-gray-400">总记录数</p></div>
+            <div class="bg-emerald-50 rounded-xl border border-emerald-100 p-4 text-center"><p class="text-2xl font-semibold text-emerald-700">+${stats.earn}</p><p class="text-xs text-emerald-500">累计加分</p></div>
+            <div class="bg-red-50 rounded-xl border border-red-100 p-4 text-center"><p class="text-2xl font-semibold text-red-700">-${stats.deduct}</p><p class="text-xs text-red-500">累计扣分</p></div>
+            <div class="bg-purple-50 rounded-xl border border-purple-100 p-4 text-center"><p class="text-2xl font-semibold text-purple-700">${stats.redeem}</p><p class="text-xs text-purple-500">累计兑换</p></div>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <input value="${escapeHtml(RecordsState.search)}" oninput="RecordsState.search=this.value; RecordsState.page=1; Router.render();" placeholder="搜索原因或学生..." class="flex-1 min-w-40 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+            <select onchange="RecordsState.type=this.value; RecordsState.page=1; Router.render();" class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"><option value="">全部类型</option><option value="earn" ${RecordsState.type === 'earn' ? 'selected' : ''}>加分</option><option value="deduct" ${RecordsState.type === 'deduct' ? 'selected' : ''}>扣分</option><option value="redeem" ${RecordsState.type === 'redeem' ? 'selected' : ''}>兑换</option></select>
+            <select onchange="RecordsState.studentId=this.value; RecordsState.page=1; Router.render();" class="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"><option value="">全部学生</option>${students.map(s => `<option value="${s.id}" ${RecordsState.studentId === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}</select>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <table class="w-full"><thead><tr class="border-b border-gray-100 bg-gray-50"><th class="text-left px-4 py-3 text-xs text-gray-500">时间</th><th class="text-left px-4 py-3 text-xs text-gray-500">学生</th><th class="text-left px-4 py-3 text-xs text-gray-500">类型</th><th class="text-left px-4 py-3 text-xs text-gray-500">原因</th><th class="text-right px-4 py-3 text-xs text-gray-500">积分变动</th></tr></thead>
+              <tbody class="divide-y divide-gray-50">${pageItems.map(rec => {
+                const s = students.find(x => x.id === rec.studentId);
+                const g = groups.find(x => x.id === s?.groupId);
+                const label = rec.type === 'earn' ? '加分' : rec.type === 'deduct' ? '扣分' : '兑换';
+                const cls = rec.type === 'earn' ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : rec.type === 'deduct' ? 'text-red-600 bg-red-50 border-red-200' : 'text-purple-600 bg-purple-50 border-purple-200';
+                return `<tr><td class="px-4 py-3 text-xs text-gray-500">${formatDate(rec.createdAt)}</td><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs" style="background-color:${g?.color || '#9ca3af'}">${escapeHtml((s?.name || '?').slice(0,1))}</div><div><p class="text-sm text-gray-800">${escapeHtml(s?.name || '未知')}</p><p class="text-xs text-gray-400">${escapeHtml(g?.name || '未分组')}</p></div></div></td><td class="px-4 py-3"><span class="inline-flex px-2 py-0.5 rounded-full text-xs border ${cls}">${label}</span></td><td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(rec.reason)}</td><td class="px-4 py-3 text-right text-sm font-semibold ${rec.type === 'earn' ? 'text-emerald-600' : 'text-red-600'}">${rec.type === 'earn' ? '+' : '-'}${rec.points}</td></tr>`;
+              }).join('')}</tbody>
+            </table>
+            ${pageItems.length === 0 ? '<div class="text-center py-10 text-sm text-gray-400">暂无匹配记录</div>' : ''}
+          </div>
+          ${totalPages > 1 ? `<div class="flex items-center justify-between text-sm text-gray-500"><span>共 ${filtered.length} 条记录</span><div class="flex items-center gap-2"><button onclick="RecordsState.page=Math.max(1,RecordsState.page-1); Router.render();" class="px-3 py-1.5 border border-gray-200 rounded-lg">上一页</button><span>${RecordsState.page}/${totalPages}</span><button onclick="RecordsState.page=Math.min(${totalPages},RecordsState.page+1); Router.render();" class="px-3 py-1.5 border border-gray-200 rounded-lg">下一页</button></div></div>` : ''}
+        </div>
+      `;
+    };
+
+    Pages.Shop = () => {
+      const { shopItems } = Store.get();
+      const totalSold = shopItems.reduce((s, i) => s + i.sold, 0);
+      return `
+        <div class="p-6 max-w-5xl mx-auto space-y-5">
+          <div class="flex items-center justify-between"><div><h1 class="text-gray-900 text-xl">积分商店</h1><p class="text-sm text-gray-500 mt-0.5">学生可用积分兑换奖励</p></div><button onclick="ShopState.modal='add'; Router.render();" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm">添加奖励</button></div>
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-white rounded-xl border border-gray-100 p-4 text-center"><p class="text-2xl font-semibold text-gray-900">${shopItems.length}</p><p class="text-xs text-gray-400">奖励品种</p></div>
+            <div class="bg-indigo-50 rounded-xl border border-indigo-100 p-4 text-center"><p class="text-2xl font-semibold text-indigo-700">${totalSold}</p><p class="text-xs text-indigo-400">已兑换次数</p></div>
+            <div class="bg-amber-50 rounded-xl border border-amber-100 p-4 text-center"><p class="text-2xl font-semibold text-amber-700">${shopItems.filter(i => i.stock === -1 || i.stock - i.sold > 0).length}</p><p class="text-xs text-amber-400">有库存商品</p></div>
+          </div>
+          ${shopItems.length === 0 ? '<div class="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200 text-sm text-gray-400">暂无商品</div>' : `
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              ${shopItems.map(item => {
+                const remaining = item.stock === -1 ? null : item.stock - item.sold;
+                const out = remaining !== null && remaining <= 0;
+                return `<div class="bg-white rounded-xl border shadow-sm p-5 ${out ? 'opacity-60' : ''}">
+                  <div class="flex items-start justify-between mb-3"><div class="w-11 h-11 rounded-xl bg-indigo-100 flex items-center justify-center text-2xl">🎁</div><div class="flex gap-1"><button onclick="ShopState.editing=Store.get().shopItems.find(i=>i.id==='${item.id}'); ShopState.modal='edit'; Router.render();" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">${Icons.edit2}</button><button onclick="deleteShopItem('${item.id}')" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">${Icons.trash2}</button></div></div>
+                  <h4 class="text-gray-900 mb-1">${escapeHtml(item.name)}</h4><p class="text-sm text-gray-500 mb-3">${escapeHtml(item.description || '')}</p>
+                  <div class="flex items-center justify-between mb-3"><div class="text-xs text-gray-500">${item.stock === -1 ? '不限库存' : `剩余 ${remaining} 件`}</div><div class="text-xs text-gray-500">已兑换 ${item.sold} 次</div></div>
+                  <div class="flex items-center justify-between"><div><span class="text-xl font-bold text-indigo-600">${item.requiredPoints}</span><span class="text-xs text-gray-400 ml-1">积分</span></div><button onclick="ShopState.redeeming=Store.get().shopItems.find(i=>i.id==='${item.id}'); ShopState.modal='redeem'; Router.render();" ${out ? 'disabled' : ''} class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-lg ${out ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'}">${out ? '已售罄' : '兑换'}</button></div>
+                </div>`;
+              }).join('')}
+            </div>
+          `}
+          ${ShopState.modal ? renderShopModal() : ''}
+        </div>
+      `;
+    };
+
+    Pages.Tools = () => {
+      const { students, groups } = Store.get();
+      const pool = students.filter(s => !ToolsState.randomGroup || (ToolsState.randomGroup === '__none__' ? !s.groupId : s.groupId === ToolsState.randomGroup));
+      const m = Math.floor(ToolsState.timerRemaining / 60);
+      const s = ToolsState.timerRemaining % 60;
+      return `
+        <div class="p-6 max-w-5xl mx-auto space-y-5">
+          <div><h1 class="text-gray-900 text-xl">课堂工具</h1><p class="text-sm text-gray-500 mt-0.5">倒计时与随机点名</p></div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <h3 class="text-gray-800">课堂倒计时</h3>
+              <div class="flex flex-wrap gap-2">
+                ${[1,3,5,10].map(x => `<button onclick="setTimerMinutes(${x})" class="px-3 py-1.5 rounded-lg text-sm border border-gray-200 hover:bg-gray-50">${x} 分钟</button>`).join('')}
+                <input type="number" min="0.5" step="0.5" value="${escapeHtml(ToolsState.timerInput)}" oninput="ToolsState.timerInput=this.value" placeholder="自定义" class="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm" />
+                <button onclick="applyCustomTimer()" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-sm">设置</button>
+              </div>
+              <div class="text-center py-6"><div class="text-5xl font-semibold ${ToolsState.timerRemaining <= 30 && ToolsState.timerRemaining > 0 ? 'text-red-600' : 'text-gray-900'}">${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}</div><p class="text-xs text-gray-400 mt-1">${ToolsState.timerRunning ? '计时中...' : '已暂停'}</p></div>
+              <div class="flex items-center justify-center gap-2"><button onclick="resetTimer()" class="px-4 py-2 border border-gray-200 rounded-lg text-sm">重置</button><button onclick="toggleTimer()" class="px-5 py-2 rounded-lg text-sm text-white ${ToolsState.timerRunning ? 'bg-amber-500' : 'bg-indigo-600'}">${ToolsState.timerRunning ? '暂停' : '开始'}</button></div>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <h3 class="text-gray-800">随机点名</h3>
+              <div class="flex flex-wrap gap-2">
+                <select onchange="ToolsState.randomGroup=this.value; ToolsState.randomResult=[]; Router.render();" class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="">全部学生（${students.length}）</option><option value="__none__" ${ToolsState.randomGroup === '__none__' ? 'selected' : ''}>未分组（${students.filter(x => !x.groupId).length}）</option>
+                  ${groups.map(g => `<option value="${g.id}" ${ToolsState.randomGroup === g.id ? 'selected' : ''}>${escapeHtml(g.name)}（${students.filter(x => x.groupId === g.id).length}）</option>`).join('')}
+                </select>
+                <input type="number" min="1" max="${Math.max(1, pool.length)}" value="${ToolsState.randomCount}" oninput="ToolsState.randomCount=Math.max(1,Math.min(parseInt(this.value||'1',10),${Math.max(1, pool.length)}));" class="w-20 border border-gray-200 rounded-lg px-2 py-2 text-sm text-center" />
+              </div>
+              <div class="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 min-h-40 p-6 flex items-center justify-center text-center">
+                ${ToolsState.randomSpinning ? `<div><div class="text-4xl font-bold text-indigo-700">${escapeHtml(ToolsState.randomDisplay || '')}</div><p class="text-xs text-indigo-400 mt-2">抽取中...</p></div>` : ToolsState.randomResult.length ? `<div><p class="text-sm text-emerald-700 mb-3">已抽取 ${ToolsState.randomResult.length} 名学生</p><div class="flex flex-wrap justify-center gap-2">${ToolsState.randomResult.map(sx => `<span class="px-3 py-1 bg-white rounded-full text-sm border border-indigo-100">${escapeHtml(sx.name)}</span>`).join('')}</div></div>` : '<p class="text-sm text-gray-500">点击下方按钮随机点名</p>'}
+              </div>
+              <button onclick="spinRandomStudents()" ${pool.length === 0 || ToolsState.randomSpinning ? 'disabled' : ''} class="w-full py-2.5 rounded-lg text-sm text-white bg-purple-600 ${pool.length === 0 || ToolsState.randomSpinning ? 'opacity-50' : 'hover:bg-purple-700'}">${ToolsState.randomSpinning ? '抽取中...' : '随机点名'}</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    Pages.Settings = () => {
+      const { students, groups, rules, records, shopItems } = Store.get();
+      const totalRedeemed = shopItems.reduce((s, i) => s + i.sold, 0);
+      const totalEarned = records.filter(r => r.type === 'earn').reduce((s, r) => s + r.points, 0);
+      const totalDeducted = records.filter(r => r.type === 'deduct').reduce((s, r) => s + r.points, 0);
+      return `
+        <div class="p-6 max-w-3xl mx-auto space-y-5">
+          <div><h1 class="text-gray-900 text-xl">数据管理</h1><p class="text-sm text-gray-500 mt-0.5">导入导出数据、查看统计信息和危险操作</p></div>
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 class="text-gray-800 mb-4">数据概览</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              ${[
+                ['学生人数', `${students.length} 人`], ['小组数量', `${groups.length} 个`], ['积分规则', `${rules.length} 条`],
+                ['积分记录', `${records.length} 条`], ['商店奖励', `${shopItems.length} 件`], ['累计兑换', `${totalRedeemed} 次`],
+              ].map(x => `<div class="bg-gray-50 rounded-lg p-3"><p class="text-xs text-gray-400">${x[0]}</p><p class="text-lg font-semibold text-gray-900">${x[1]}</p></div>`).join('')}
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-3 text-center"><div><p class="text-sm font-semibold text-emerald-600">+${totalEarned}</p><p class="text-xs text-gray-400">累计加分</p></div><div><p class="text-sm font-semibold text-red-600">-${totalDeducted}</p><p class="text-xs text-gray-400">累计扣分</p></div><div><p class="text-sm font-semibold text-purple-600">${records.filter(r => r.type === 'redeem').reduce((a,b)=>a+b.points,0)}</p><p class="text-xs text-gray-400">积分消耗</p></div></div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-2">
+            <h3 class="text-gray-800 mb-2">导出数据</h3>
+            <button onclick="exportStudentsCsv()" class="w-full text-left px-3 py-2 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">导出学生积分报表（CSV）</button>
+            <button onclick="exportRecordsCsv()" class="w-full text-left px-3 py-2 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">导出积分记录（CSV）</button>
+            <button onclick="downloadJSON({rules:Store.get().rules,exportedAt:new Date().toISOString()}, '积分规则_'+new Date().toLocaleDateString('zh-CN')+'.json')" class="w-full text-left px-3 py-2 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">导出积分规则（JSON）</button>
+            <button onclick="downloadJSON({...Store.get(), exportedAt:new Date().toISOString()}, '班级数据备份_'+new Date().toLocaleDateString('zh-CN')+'.json')" class="w-full text-left px-3 py-2 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">导出完整数据（JSON）</button>
+          </div>
+          <div class="bg-white rounded-xl border border-red-200 shadow-sm p-5">
+            <h3 class="text-red-700 mb-3">危险操作</h3>
+            ${!SettingsState.confirmReset ? `
+              <div class="flex items-start justify-between gap-4"><div><p class="text-sm font-medium text-gray-800">积分清零</p><p class="text-xs text-gray-500 mt-1">将所有学生积分清零并清除积分记录。此操作不可恢复。</p></div><button onclick="SettingsState.confirmReset=true; Router.render();" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm">积分清零</button></div>
+            ` : `
+              <div class="space-y-3"><div class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">此操作将清除 ${students.length} 名学生积分和 ${records.length} 条记录，无法恢复。</div><input value="${escapeHtml(SettingsState.confirmText)}" oninput="SettingsState.confirmText=this.value" placeholder="请输入 确认清零" class="w-full border border-red-300 rounded-lg px-3 py-2 text-sm" /><div class="flex gap-2"><button onclick="SettingsState.confirmReset=false; SettingsState.confirmText=''; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm">取消</button><button onclick="confirmResetPoints()" ${SettingsState.confirmText !== '确认清零' ? 'disabled' : ''} class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm ${SettingsState.confirmText !== '确认清零' ? 'opacity-50' : ''}">执行清零</button></div></div>
+            `}
+          </div>
+          <p class="text-xs text-gray-400 text-center">所有数据保存在浏览器 LocalStorage 中，建议定期导出备份。</p>
+        </div>
+      `;
+    };
+
+    function filteredStudentsForPoints() {
+      const { students } = Store.get();
+      return students.filter(s => {
+        const mg = !PointsState.filterGroup || (PointsState.filterGroup === '__none__' ? !s.groupId : s.groupId === PointsState.filterGroup);
+        const ms = !PointsState.search || s.name.includes(PointsState.search);
+        return mg && ms;
+      });
+    }
+    function togglePointStudent(id) {
+      if (PointsState.selected.has(id)) PointsState.selected.delete(id);
+      else PointsState.selected.add(id);
+      Router.render();
+    }
+    function applyRuleById(ruleId) {
+      const rule = Store.get().rules.find(r => r.id === ruleId);
+      if (!rule || PointsState.selected.size === 0) return;
+      DB.applyPoints([...PointsState.selected], rule.points, rule.name, rule.id);
+      PointsState.message = `已为 ${PointsState.selected.size} 名学生应用规则「${rule.name}」`;
+      setTimeout(() => { PointsState.message = ''; Router.render(); }, 2000);
+      Router.render();
+    }
+    function applyCustomPoints() {
+      const pts = parseInt(PointsState.customPoints, 10);
+      if (!pts || pts <= 0 || !PointsState.reason.trim() || PointsState.selected.size === 0) return Components.toast('请完善积分与原因', 'error');
+      const signed = PointsState.mode === 'earn' ? pts : -pts;
+      DB.applyPoints([...PointsState.selected], signed, PointsState.reason.trim());
+      PointsState.customPoints = '';
+      PointsState.reason = '';
+      PointsState.message = `已为 ${PointsState.selected.size} 名学生${PointsState.mode === 'earn' ? '加' : '扣'} ${pts} 分`;
+      setTimeout(() => { PointsState.message = ''; Router.render(); }, 2000);
+      Router.render();
+    }
+
+    function renderRuleModal() {
+      const edit = RulesState.modal === 'edit';
+      const current = RulesState.editing || { name: '', points: 5, icon: '⭐' };
+      const isPositive = (current.points ?? 1) >= 0;
+      return Components.Modal({
+        title: edit ? '编辑规则' : '新建规则',
+        onClose: 'RulesState.modal=null; RulesState.editing=null; Router.render();',
+        content: `<div class="space-y-4">
+          <div><label class="block text-sm text-gray-700 mb-2">图标</label><div class="flex flex-wrap gap-2">${RuleIconOptions.map(ic => `<button onclick="document.getElementById('rule-icon-input').value='${ic}'" class="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-lg">${ic}</button>`).join('')}</div><input id="rule-icon-input" value="${escapeHtml(current.icon || '⭐')}" class="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <div><label class="block text-sm text-gray-700 mb-1.5">规则名称</label><input id="rule-name-input" value="${escapeHtml(current.name || '')}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <div><label class="block text-sm text-gray-700 mb-1.5">积分值（正数）</label><input id="rule-points-input" type="number" min="1" value="${Math.abs(current.points || 5)}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+          <div class="flex rounded-lg overflow-hidden border border-gray-200 w-fit"><button onclick="document.getElementById('rule-sign-input').value='+'" class="px-4 py-2 text-sm ${isPositive ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600'}">加分</button><button onclick="document.getElementById('rule-sign-input').value='-'" class="px-4 py-2 text-sm ${!isPositive ? 'bg-red-600 text-white' : 'bg-white text-gray-600'}">扣分</button></div><input id="rule-sign-input" type="hidden" value="${isPositive ? '+' : '-'}" />
+          <div class="flex gap-2"><button onclick="RulesState.modal=null; RulesState.editing=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm">取消</button><button onclick="saveRule()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">保存</button></div>
+        </div>`,
+      });
+    }
+    function saveRule() {
+      const name = ($('#rule-name-input')?.value || '').trim();
+      const icon = ($('#rule-icon-input')?.value || '⭐').trim() || '⭐';
+      const p = parseInt($('#rule-points-input')?.value || '0', 10);
+      const sign = $('#rule-sign-input')?.value === '-' ? -1 : 1;
+      if (!name || !p || p <= 0) return Components.toast('请完善规则信息', 'error');
+      const points = sign * p;
+      if (RulesState.modal === 'edit') DB.updateRule(RulesState.editing.id, name, points, icon);
+      else DB.addRule(name, points, icon);
+      RulesState.modal = null;
+      RulesState.editing = null;
+      Components.toast('规则已保存');
+      Router.render();
+    }
+    function deleteRule(id) {
+      Components.confirm({ title: '删除规则', message: '确定删除该规则吗？历史记录将保留。', onConfirm: () => { DB.deleteRule(id); Components.toast('规则已删除'); Router.render(); } });
+    }
+
+    function renderShopModal() {
+      if (ShopState.modal === 'add' || ShopState.modal === 'edit') {
+        const item = ShopState.editing || { name: '', requiredPoints: 10, stock: 10, description: '' };
+        const unlimited = item.stock === -1;
+        return Components.Modal({
+          title: ShopState.modal === 'edit' ? '编辑奖励' : '添加奖励',
+          onClose: 'ShopState.modal=null; ShopState.editing=null; ShopState.redeeming=null; Router.render();',
+          content: `<div class="space-y-4">
+            <div><label class="block text-sm text-gray-700 mb-1.5">奖励名称</label><input id="shop-name-input" value="${escapeHtml(item.name || '')}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <div><label class="block text-sm text-gray-700 mb-1.5">所需积分</label><input id="shop-points-input" type="number" min="1" value="${item.requiredPoints || 1}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+            <div><label class="block text-sm text-gray-700 mb-1.5">库存</label><div class="flex items-center gap-2"><input id="shop-unlimited-input" type="checkbox" ${unlimited ? 'checked' : ''} onchange="const el=document.getElementById('shop-stock-input'); if(!el)return; el.disabled=this.checked; el.classList.toggle('opacity-50', this.checked);" /><span class="text-sm text-gray-600">不限库存</span></div><input id="shop-stock-input" type="number" min="0" value="${unlimited ? '' : item.stock}" class="mt-2 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm ${unlimited ? 'opacity-50' : ''}" ${unlimited ? 'disabled' : ''} /></div>
+            <div><label class="block text-sm text-gray-700 mb-1.5">描述</label><textarea id="shop-desc-input" rows="2" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">${escapeHtml(item.description || '')}</textarea></div>
+            <div class="flex gap-2"><button onclick="ShopState.modal=null; ShopState.editing=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm">取消</button><button onclick="saveShopItem()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">保存</button></div>
+          </div>`,
+        });
+      }
+      if (ShopState.modal === 'redeem') {
+        const item = ShopState.redeeming;
+        const { students } = Store.get();
+        return Components.Modal({
+          title: '兑换奖励',
+          onClose: 'ShopState.modal=null; ShopState.redeeming=null; Router.render();',
+          content: `<div class="space-y-4"><div class="bg-indigo-50 rounded-xl p-3"><p class="text-indigo-900 font-medium">${escapeHtml(item.name)}</p><p class="text-xs text-indigo-600">${item.requiredPoints} 积分</p></div><select id="redeem-student-input" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"><option value="">请选择学生</option>${students.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.availablePoints} 分)</option>`).join('')}</select><div class="flex gap-2"><button onclick="ShopState.modal=null; ShopState.redeeming=null; Router.render();" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm">取消</button><button onclick="confirmRedeemItem()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm">确认兑换</button></div></div>`,
+        });
+      }
+      return '';
+    }
+    function saveShopItem() {
+      const name = ($('#shop-name-input')?.value || '').trim();
+      const pts = parseInt($('#shop-points-input')?.value || '0', 10);
+      const unlimited = !!$('#shop-unlimited-input')?.checked;
+      const stock = unlimited ? -1 : parseInt($('#shop-stock-input')?.value || '0', 10);
+      const desc = ($('#shop-desc-input')?.value || '').trim();
+      if (!name || !pts || pts <= 0 || (!unlimited && (isNaN(stock) || stock < 0))) return Components.toast('请完善商品信息', 'error');
+      if (ShopState.modal === 'edit') DB.updateShopItem(ShopState.editing.id, name, pts, stock, desc);
+      else DB.addShopItem(name, pts, stock, desc);
+      ShopState.modal = null;
+      ShopState.editing = null;
+      Components.toast('商品已保存');
+      Router.render();
+    }
+    function deleteShopItem(id) {
+      Components.confirm({ title: '删除奖励', message: '确定删除该奖励吗？', onConfirm: () => { DB.deleteShopItem(id); Components.toast('商品已删除'); Router.render(); } });
+    }
+    function confirmRedeemItem() {
+      const sid = $('#redeem-student-input')?.value;
+      if (!sid || !ShopState.redeeming) return Components.toast('请选择学生', 'error');
+      const res = DB.redeemItem(sid, ShopState.redeeming.id);
+      if (!res.success) return Components.toast(res.message, 'error');
+      Components.toast(res.message);
+      ShopState.modal = null;
+      ShopState.redeeming = null;
+      Router.render();
+    }
+
+    function setTimerMinutes(mins) {
+      ToolsState.timerRunning = false;
+      clearInterval(ToolsState.timerTick);
+      ToolsState.timerTotal = mins * 60;
+      ToolsState.timerRemaining = mins * 60;
+      Router.render();
+    }
+    function applyCustomTimer() {
+      const m = parseFloat(ToolsState.timerInput);
+      if (!m || m <= 0) return;
+      setTimerMinutes(m);
+      ToolsState.timerInput = '';
+    }
+    function toggleTimer() {
+      if (ToolsState.timerRemaining <= 0) return;
+      ToolsState.timerRunning = !ToolsState.timerRunning;
+      if (ToolsState.timerRunning) {
+        ToolsState.timerTick = setInterval(() => {
+          if (ToolsState.timerRemaining <= 1) {
+            ToolsState.timerRemaining = 0;
+            ToolsState.timerRunning = false;
+            clearInterval(ToolsState.timerTick);
+          } else {
+            ToolsState.timerRemaining -= 1;
+          }
+          Router.render();
+        }, 1000);
+      } else {
+        clearInterval(ToolsState.timerTick);
+      }
+      Router.render();
+    }
+    function resetTimer() {
+      ToolsState.timerRunning = false;
+      clearInterval(ToolsState.timerTick);
+      ToolsState.timerRemaining = ToolsState.timerTotal;
+      Router.render();
+    }
+    function spinRandomStudents() {
+      const { students } = Store.get();
+      const pool = students.filter(s => !ToolsState.randomGroup || (ToolsState.randomGroup === '__none__' ? !s.groupId : s.groupId === ToolsState.randomGroup));
+      if (!pool.length) return;
+      const count = Math.min(Math.max(1, parseInt(ToolsState.randomCount, 10) || 1), pool.length);
+      let n = 0;
+      ToolsState.randomSpinning = true;
+      ToolsState.randomResult = [];
+      Router.render();
+      const t = setInterval(() => {
+        ToolsState.randomDisplay = pool[Math.floor(Math.random() * pool.length)].name;
+        n += 1;
+        Router.render();
+        if (n >= 16) {
+          clearInterval(t);
+          const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+          ToolsState.randomResult = picked;
+          ToolsState.randomDisplay = '';
+          ToolsState.randomSpinning = false;
+          Router.render();
+        }
+      }, 80);
+    }
+
+    function exportStudentsCsv() {
+      const { students, groups } = Store.get();
+      const header = toCSVLine(['姓名', '小组', '总积分', '可用积分']);
+      const rows = students.map(s => {
+        const g = groups.find(x => x.id === s.groupId);
+        return toCSVLine([s.name, g?.name || '未分组', s.totalPoints, s.availablePoints]);
+      });
+      downloadCSV([header, ...rows].join('\n'), `学生积分报表_${new Date().toLocaleDateString('zh-CN')}.csv`);
+      Components.toast('学生报表已导出');
+    }
+    function exportRecordsCsv() {
+      const { records, students, groups } = Store.get();
+      const typeMap = { earn: '加分', deduct: '扣分', redeem: '兑换' };
+      const header = toCSVLine(['时间', '学生', '小组', '类型', '积分', '原因']);
+      const rows = [...records].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(r => {
+        const s = students.find(x => x.id === r.studentId);
+        const g = groups.find(x => x.id === s?.groupId);
+        const score = `${r.type === 'earn' ? '+' : '-'}${r.points}`;
+        return toCSVLine([new Date(r.createdAt).toLocaleString('zh-CN'), s?.name || '未知', g?.name || '未分组', typeMap[r.type] || r.type, score, r.reason]);
+      });
+      downloadCSV([header, ...rows].join('\n'), `积分记录_${new Date().toLocaleDateString('zh-CN')}.csv`);
+      Components.toast('积分记录已导出');
+    }
+    function confirmResetPoints() {
+      if (SettingsState.confirmText !== '确认清零') return;
+      DB.resetPoints();
+      SettingsState.confirmReset = false;
+      SettingsState.confirmText = '';
+      Components.toast('已执行积分清零');
+      Router.render();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 8. 布局组件
+    // ──────────────────────────────────────────────────────────────
+    function Layout(content) {
+      const currentRoute = Router.getCurrentRoute();
+      const navItems = [
+        { route: '', label: '总览', icon: Icons.barChart3 },
+        { route: 'students', label: '学生管理', icon: Icons.users },
+        { route: 'groups', label: '小组管理', icon: Icons.users },
+        { route: 'points', label: '积分操作', icon: Icons.plus },
+        { route: 'rules', label: '积分规则', icon: Icons.star },
+        { route: 'records', label: '积分记录', icon: Icons.fileText },
+        { route: 'shop', label: '积分商店', icon: Icons.trophy },
+        { route: 'tools', label: '课堂工具', icon: Icons.shuffle },
+        { route: 'settings', label: '数据管理', icon: Icons.settings },
+      ];
+
+      return `
+        <div class="flex min-h-screen">
+          <aside class="w-56 bg-white border-r border-gray-200 hidden md:block">
+            <div class="p-4 border-b border-gray-100"><h1 class="text-lg font-semibold text-gray-900 flex items-center gap-2"><span class="text-2xl">🏆</span> 班级积分</h1></div>
+            <nav class="p-3 space-y-0.5">
+              ${navItems.map(item => `
+                <button onclick="Router.navigate('${item.route}')" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${currentRoute === item.route ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}">${item.icon} ${item.label}</button>
+              `).join('')}
+            </nav>
+          </aside>
+
+          <div class="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-40 px-4 py-3 flex items-center justify-between">
+            <h1 class="text-lg font-semibold text-gray-900">🏆 班级积分</h1>
+            <button onclick="document.getElementById('mobile-menu')?.classList.toggle('hidden')" class="p-2 text-gray-600">${Icons.menu}</button>
+          </div>
+
+          <div id="mobile-menu" class="hidden md:hidden fixed inset-0 bg-black/50 z-50" onclick="this.classList.add('hidden')">
+            <div class="bg-white w-56 h-full p-4" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-between mb-4"><h1 class="text-lg font-semibold">🏆 班级积分</h1><button onclick="document.getElementById('mobile-menu')?.classList.add('hidden')">${Icons.x}</button></div>
+              <nav class="space-y-1">
+                ${navItems.map(item => `
+                  <button onclick="Router.navigate('${item.route}'); document.getElementById('mobile-menu')?.classList.add('hidden')" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${currentRoute === item.route ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}">${item.icon} ${item.label}</button>
+                `).join('')}
+              </nav>
+            </div>
+          </div>
+
+          <main class="flex-1 overflow-auto"><div class="md:pt-0 pt-14">${content}</div></main>
+        </div>
+      `;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 9. 初始化
+    // ──────────────────────────────────────────────────────────────
+    function init() {
+      DB.bootstrapStorage();
+      Store.init();
+      Router.init();
+      console.log(`班级积分系统已启动 - 数据存储: ${DB.STORAGE_KEY}`);
+    }
+    init();
+  </script>
+</body>
+</html>
